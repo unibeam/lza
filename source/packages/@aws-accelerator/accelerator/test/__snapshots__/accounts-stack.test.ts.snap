@@ -317,6 +317,9 @@ exports[`AccountsStack us-east-1 Construct(AccountsStack):  Snapshot Test 1`] = 
     },
     "AccessAnalyzerServiceLinkedRoleCreateServiceLinkedRoleResource7C0C5637": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "AccessAnalyzerServiceLinkedRoleCreateServiceLinkedRoleFunctionLogGroup6DA63F2D",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -1337,6 +1340,9 @@ exports[`AccountsStack us-east-1 Construct(AccountsStack):  Snapshot Test 1`] = 
     },
     "GuardDutyServiceLinkedRoleCreateServiceLinkedRoleResourceD5FE1FBD": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "GuardDutyServiceLinkedRoleCreateServiceLinkedRoleFunctionLogGroup362E3CCE",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -1604,6 +1610,9 @@ exports[`AccountsStack us-east-1 Construct(AccountsStack):  Snapshot Test 1`] = 
     },
     "MacieServiceLinkedRoleCreateServiceLinkedRoleResourceD2E64172": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "MacieServiceLinkedRoleCreateServiceLinkedRoleFunctionLogGroup7DF41D83",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -1896,6 +1905,9 @@ exports[`AccountsStack us-east-1 Construct(AccountsStack):  Snapshot Test 1`] = 
     },
     "SecurityHubServiceLinkedRoleCreateServiceLinkedRoleResource4CC7EFAA": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "SecurityHubServiceLinkedRoleCreateServiceLinkedRoleFunctionLogGroupD9501DFE",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -1915,7 +1927,7 @@ exports[`AccountsStack us-east-1 Construct(AccountsStack):  Snapshot Test 1`] = 
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-AccountsStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.7.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },
@@ -1970,7 +1982,7 @@ exports[`AccountsStack us-west-2 Construct(AccountsStackUsWest2):  Snapshot Test
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-AccountsStack-111111111111-us-west-2/version",
         "Type": "String",
-        "Value": "1.7.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },

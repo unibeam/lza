@@ -261,6 +261,9 @@ exports[`LoggingStack Construct(LoggingStack):  Snapshot Test 1`] = `
     },
     "AWSServiceRoleForAWSCloud9CreateServiceLinkedRoleResource5A765F9A": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "AWSServiceRoleForAWSCloud9CreateServiceLinkedRoleFunctionLogGroup3B94FCDE",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -1856,6 +1859,9 @@ exports[`LoggingStack Construct(LoggingStack):  Snapshot Test 1`] = `
     },
     "AutoScalingServiceLinkedRoleCreateServiceLinkedRoleResourceE203F878": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "AutoScalingServiceLinkedRoleCreateServiceLinkedRoleFunctionLogGroupAF98D208",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -4016,7 +4022,7 @@ exports[`LoggingStack Construct(LoggingStack):  Snapshot Test 1`] = `
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-LoggingStack-333333333333-us-east-1/version",
         "Type": "String",
-        "Value": "1.7.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },
@@ -4902,6 +4908,9 @@ exports[`LoggingStack Construct(LoggingStack):  Snapshot Test 2`] = `
     },
     "AWSServiceRoleForAWSCloud9CreateServiceLinkedRoleResource5A765F9A": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "AWSServiceRoleForAWSCloud9CreateServiceLinkedRoleFunctionLogGroup3B94FCDE",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -5459,6 +5468,9 @@ exports[`LoggingStack Construct(LoggingStack):  Snapshot Test 2`] = `
     },
     "AutoScalingServiceLinkedRoleCreateServiceLinkedRoleResourceE203F878": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "AutoScalingServiceLinkedRoleCreateServiceLinkedRoleFunctionLogGroupAF98D208",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -8392,7 +8404,7 @@ exports[`LoggingStack Construct(LoggingStack):  Snapshot Test 2`] = `
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-LoggingStack-333333333333-us-west-2/version",
         "Type": "String",
-        "Value": "1.7.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },
@@ -9537,6 +9549,9 @@ exports[`LoggingStackOuTargets Construct(LoggingStackOuTargets):  Snapshot Test 
     },
     "AWSServiceRoleForAWSCloud9CreateServiceLinkedRoleResource5A765F9A": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "AWSServiceRoleForAWSCloud9CreateServiceLinkedRoleFunctionLogGroup3B94FCDE",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -10859,6 +10874,9 @@ exports[`LoggingStackOuTargets Construct(LoggingStackOuTargets):  Snapshot Test 
     },
     "AutoScalingServiceLinkedRoleCreateServiceLinkedRoleResourceE203F878": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "AutoScalingServiceLinkedRoleCreateServiceLinkedRoleFunctionLogGroupAF98D208",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -12881,7 +12899,7 @@ exports[`LoggingStackOuTargets Construct(LoggingStackOuTargets):  Snapshot Test 
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-LoggingStack-333333333333-us-east-1/version",
         "Type": "String",
-        "Value": "1.7.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },

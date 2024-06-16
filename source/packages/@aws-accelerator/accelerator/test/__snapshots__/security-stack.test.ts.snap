@@ -1245,6 +1245,10 @@ exports[`SecurityStack Construct(SecurityStack):  Snapshot Test 1`] = `
             "enable": true,
             "name": "CIS AWS Foundations Benchmark v1.4.0",
           },
+          {
+            "enable": true,
+            "name": "CIS AWS Foundations Benchmark v3.0.0",
+          },
         ],
       },
       "Type": "Custom::SecurityHubBatchEnableStandards",
@@ -1254,7 +1258,7 @@ exports[`SecurityStack Construct(SecurityStack):  Snapshot Test 1`] = `
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-SecurityStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.7.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },
@@ -2340,7 +2344,7 @@ exports[`delegatedAdminStack Construct(SecurityStack):  Snapshot Test 1`] = `
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-SecurityStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.7.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },

@@ -2475,6 +2475,9 @@ exports[`MultiOuOrganizationsStack Construct(OrganizationsStack):  Snapshot Test
     },
     "FirewallManagerServiceLinkedRoleCreateServiceLinkedRoleResourceE252DEA3": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "FirewallManagerServiceLinkedRoleCreateServiceLinkedRoleFunctionLogGroup162E628B",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -3199,7 +3202,7 @@ exports[`MultiOuOrganizationsStack Construct(OrganizationsStack):  Snapshot Test
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-OrganizationsStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.7.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },
@@ -5790,6 +5793,9 @@ exports[`OrganizationsStack Construct(OrganizationsStack):  Snapshot Test 1`] = 
     },
     "FirewallManagerServiceLinkedRoleCreateServiceLinkedRoleResourceE252DEA3": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "FirewallManagerServiceLinkedRoleCreateServiceLinkedRoleFunctionLogGroup162E628B",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -6566,7 +6572,7 @@ exports[`OrganizationsStack Construct(OrganizationsStack):  Snapshot Test 1`] = 
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-OrganizationsStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.7.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },
@@ -9087,6 +9093,9 @@ exports[`delegatedAdminStack Construct(OrganizationsStack):  Snapshot Test 1`] =
     },
     "FirewallManagerServiceLinkedRoleCreateServiceLinkedRoleResourceE252DEA3": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "FirewallManagerServiceLinkedRoleCreateServiceLinkedRoleFunctionLogGroup162E628B",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -9837,7 +9846,7 @@ exports[`delegatedAdminStack Construct(OrganizationsStack):  Snapshot Test 1`] =
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-OrganizationsStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.7.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },
