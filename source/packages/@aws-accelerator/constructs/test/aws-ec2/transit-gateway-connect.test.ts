@@ -12,24 +12,25 @@
  */
 
 import * as cdk from 'aws-cdk-lib';
-import { SecurityHubMembers } from '../../index';
+import { TransitGatewayConnect } from '../../lib/aws-ec2/transit-gateway-connect';
 import { snapShotTest } from '../snapshot-test';
 
-const testNamePrefix = 'Construct(SecurityHubMembers): ';
+const testNamePrefix = 'Construct(TransitGatewayStaticRoute): ';
 
 //Initialize stack for snapshot test and resource configuration test
 const stack = new cdk.Stack();
 
-new SecurityHubMembers(stack, 'SecurityHubMembers', {
-  kmsKey: new cdk.aws_kms.Key(stack, 'CustomKey', {}),
-  logRetentionInDays: 3653,
-  securityHubMemberAccountIds: [],
-  autoEnableOrgMembers: true,
+new TransitGatewayConnect(stack, 'TransitGatewayConnectVpcAttach', {
+  name: 'TestVpcTgwConnect',
+  transitGatewayAttachmentId: 'tgw-attach-0123456789012',
+  options: {
+    protocol: 'gre',
+  },
 });
 
 /**
- * SecurityHubMembers construct test
+ * TransitGatewayConnectAttachment construct test
  */
-describe('SecurityHubMembers', () => {
+describe('TransitGatewayConnectAttachment', () => {
   snapShotTest(testNamePrefix, stack);
 });
