@@ -21,9 +21,6 @@ exports[`ActiveDirectory Construct(ActiveDirectory):  Snapshot Test 1`] = `
     },
     "ActiveDirectoryAcceleratorManagedActiveDirectoryLogSubscription31CCD066": {
       "DeletionPolicy": "Delete",
-      "DependsOn": [
-        "ActiveDirectoryAcceleratorManagedActiveDirectoryLogSubscriptionManageActiveDirectoryLogSubscriptionFunctionLogGroupCCE84E08",
-      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [

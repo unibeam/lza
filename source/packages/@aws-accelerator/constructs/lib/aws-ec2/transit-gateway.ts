@@ -438,10 +438,6 @@ export interface TransitGatewayProps {
   readonly vpnEcmpSupport?: string;
 
   /**
-   * A list of static CIDRs for the Transit Gateway.
-   */
-  readonly transitGatewayCidrBlocks?: string[];
-  /**
    * Tags that will be attached to the transit gateway
    */
   readonly tags?: cdk.CfnTag[];
@@ -506,7 +502,6 @@ export class TransitGateway extends TransitGatewayBase {
       defaultRouteTableAssociation: props.defaultRouteTableAssociation,
       defaultRouteTablePropagation: props.defaultRouteTablePropagation,
       dnsSupport: props.dnsSupport,
-      transitGatewayCidrBlocks: props.transitGatewayCidrBlocks,
       vpnEcmpSupport: props.vpnEcmpSupport,
       tags: props.tags,
     });

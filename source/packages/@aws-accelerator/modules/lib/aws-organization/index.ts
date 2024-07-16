@@ -187,14 +187,11 @@ export class AWSOrganization implements AcceleratorModule {
       enabledBaselines.push(...(await this.getEnabledBaselines(controlTowerClient)));
     }
 
-    const orgAccounts = await this.getOrganizationAccounts(organizationsClient);
-
     const ouItems = await this.prepareOuList(
       props,
       organizationsClient,
       ouRelationsFromConfig,
       enabledBaselines,
-      orgAccounts,
       landingZoneDetails,
     );
 
@@ -218,7 +215,6 @@ export class AWSOrganization implements AcceleratorModule {
           ouItem,
           globalRegion,
           globalConfig.managementAccountAccessRole,
-          orgAccounts,
           statuses,
           managementAccountCredentials,
         );
@@ -388,15 +384,15 @@ export class AWSOrganization implements AcceleratorModule {
 
   /**
    * Function to check if given organizational unit has any account to be invited
+   * @param client {@link OrganizationsClient}
    * @param configDirPath string
    * @param ouConfigItem {@link OuRelationType}
-   * @param orgAccounts {@link Account}[]
    * @returns status {@link InviteAccountDetailsType}
    */
   private async getInviteAccountDetails(
+    client: OrganizationsClient,
     configDirPath: string,
     ouConfigItem: OuRelationType,
-    orgAccounts: Account[],
   ): Promise<InviteAccountDetailsType> {
     let hasAccountsToInvite = false;
     const accountsConfig = AccountsConfig.load(configDirPath);
@@ -410,7 +406,7 @@ export class AWSOrganization implements AcceleratorModule {
     const promises: Promise<InviteAccountOrgDetailsType>[] = [];
 
     for (const accountItem of accountsConfig.accountIds ?? []) {
-      promises.push(this.getInviteAccountOrgDetails(accountItem, orgAccounts));
+      promises.push(this.getInviteAccountOrgDetails(client, accountItem));
     }
 
     const inviteAccountsOrgDetails = await Promise.all(promises);
@@ -432,17 +428,17 @@ export class AWSOrganization implements AcceleratorModule {
 
   /**
    * Function to check invite account presents in org
-   * @param accountItem {@link AccountIdConfig}
-   * @param orgAccounts {@link Account}[]
+   * @param client
+   * @param accountItem
    * @returns
    */
   private async getInviteAccountOrgDetails(
+    client: OrganizationsClient,
     accountItem: AccountIdConfig,
-    orgAccounts: Account[],
   ): Promise<InviteAccountOrgDetailsType> {
     return {
       accountItem: accountItem,
-      accountInOrganization: await this.isAccountInOrganization(accountItem.accountId, orgAccounts),
+      accountInOrganization: await this.isAccountInOrganization(client, accountItem.accountId),
     };
   }
 
@@ -460,7 +456,6 @@ export class AWSOrganization implements AcceleratorModule {
     client: OrganizationsClient,
     ouRelationsFromConfig: OuRelationType[],
     enabledBaselines: EnabledBaselineSummary[],
-    orgAccounts: Account[],
     landingZoneDetails?: ControlTowerLandingZoneDetailsType,
   ): Promise<OuDetailsType[]> {
     const ouItems: OuDetailsType[] = [];
@@ -478,7 +473,7 @@ export class AWSOrganization implements AcceleratorModule {
     const promises: Promise<ConfigInviteAccountDetailsType>[] = [];
 
     for (const ouConfigItem of filteredOuRelationsFromConfig) {
-      promises.push(this.getConfigInviteAccountDetails(props.configDirPath, ouConfigItem, orgAccounts));
+      promises.push(this.getConfigInviteAccountDetails(client, props.configDirPath, ouConfigItem));
     }
 
     const configInviteAccountsDetails = await Promise.all(promises);
@@ -515,19 +510,19 @@ export class AWSOrganization implements AcceleratorModule {
 
   /**
    * Function to get config invite account org details
+   * @param client {@link OrganizationsClient}
    * @param configDirPath string
    * @param ouConfigItem {@link OuRelationType}
-   * @param orgAccounts {@link Account}[]
    * @returns
    */
   private async getConfigInviteAccountDetails(
+    client: OrganizationsClient,
     configDirPath: string,
     ouConfigItem: OuRelationType,
-    orgAccounts: Account[],
   ): Promise<ConfigInviteAccountDetailsType> {
     return {
       ouConfigItem,
-      inviteAccountDetails: await this.getInviteAccountDetails(configDirPath, ouConfigItem, orgAccounts),
+      inviteAccountDetails: await this.getInviteAccountDetails(client, configDirPath, ouConfigItem),
     };
   }
 
@@ -745,7 +740,6 @@ export class AWSOrganization implements AcceleratorModule {
    * @param ouItem {@link OuDetailsType}
    * @param globalRegion string
    * @param assumeRoleName string
-   * @param orgAccounts {@link Account}[]
    * @param statuses string[]
    * @param managementAccountCredentials {@link AssumeRoleCredentialType} | undefined
    */
@@ -756,7 +750,6 @@ export class AWSOrganization implements AcceleratorModule {
     ouItem: OuDetailsType,
     globalRegion: string,
     assumeRoleName: string,
-    orgAccounts: Account[],
     statuses: string[],
     managementAccountCredentials?: AssumeRoleCredentialType,
   ): Promise<void> {
@@ -769,7 +762,7 @@ export class AWSOrganization implements AcceleratorModule {
       const promises: Promise<InviteAccountOrgDetailsType>[] = [];
 
       for (const accountToInvite of ouItem.accountsToInvite) {
-        promises.push(this.getInviteAccountOrgDetails(accountToInvite, orgAccounts));
+        promises.push(this.getInviteAccountOrgDetails(client, accountToInvite));
       }
 
       const inviteAccountsOrgDetails = await Promise.all(promises);
@@ -1061,11 +1054,13 @@ export class AWSOrganization implements AcceleratorModule {
 
   /**
    * Function to check if the given function is part of AWS Organizations
+   * @param client {@link OrganizationsClient}
    * @param accountId string
-   * @param orgAccounts {@link Account}[]
    * @returns status boolean
    */
-  private async isAccountInOrganization(accountId: string, orgAccounts: Account[]): Promise<boolean> {
+  private async isAccountInOrganization(client: OrganizationsClient, accountId: string): Promise<boolean> {
+    const orgAccounts = await this.getOrganizationAccounts(client);
+
     const accountFound = orgAccounts.find(item => item.Id === accountId);
 
     if (accountFound) {

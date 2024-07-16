@@ -1,8 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import {
-  ASEAMapping,
-  ASEAMappings,
   AseaResourceType,
+  AseaStackInfo,
   CfnResourceType,
   TransitGatewayAttachmentConfig,
   VpcConfig,
@@ -18,10 +17,10 @@ const enum RESOURCE_TYPE {
   TGW_ATTACHMENT = 'AWS::EC2::TransitGatewayAttachment',
   TRANSIT_GATEWAY_ROUTE_TABLE = 'AWS::EC2::TransitGatewayRouteTable',
 }
-const ASEA_PHASE_NUMBER = '2';
+const ASEA_PHASE_NUMBER = 2;
 
 export class TgwCrossAccountResources extends AseaResource {
-  readonly props: AseaResourceProps;
+  private readonly props: AseaResourceProps;
   private readonly propagationResources: CfnResourceType[] = [];
   private readonly associationResources: CfnResourceType[] = [];
   constructor(scope: ImportAseaResourcesStack, props: AseaResourceProps) {
@@ -31,22 +30,17 @@ export class TgwCrossAccountResources extends AseaResource {
       this.scope.addLogs(LogLevel.INFO, `No Resources to handle in stack ${props.stackInfo.stackName}`);
       return;
     }
-    if (!props.mapping) {
-      throw new Error('ASEA Mapping is undefined');
-    }
-
-    this.propagationResources = this.scope.importStackResources.getResourcesByType(RESOURCE_TYPE.TGW_PROPAGATION);
-    this.associationResources = this.scope.importStackResources.getResourcesByType(RESOURCE_TYPE.TGW_ASSOCIATION);
+    this.propagationResources = this.filterResourcesByType(this.stackInfo.resources, RESOURCE_TYPE.TGW_PROPAGATION);
+    this.associationResources = this.filterResourcesByType(this.stackInfo.resources, RESOURCE_TYPE.TGW_ASSOCIATION);
     for (const vpcItem of this.scope.vpcResources) {
       const [accountNames] = this.scope.getTransitGatewayAttachmentAccounts(vpcItem);
-      this.createTransitGatewayRouteTableAssociationPropagations(vpcItem, accountNames, props.mapping);
+      this.createTransitGatewayRouteTableAssociationPropagations(vpcItem, accountNames);
     }
   }
 
   private createTransitGatewayRouteTableAssociationPropagations(
     vpcItem: VpcConfig | VpcTemplatesConfig,
     accountNames: string[],
-    mapping: ASEAMappings,
   ) {
     if (this.propagationResources.length === 0) return;
     if (vpcItem.transitGatewayAttachments?.length === 0) {
@@ -58,7 +52,6 @@ export class TgwCrossAccountResources extends AseaResource {
       this.setTransitGatewayIds(vpcItem, tgwAttachmentItem, accountNames, transitGatewayAttachments);
       this.createTransitGatewayRouteTableAssociationPropagation(
         accountNames,
-        mapping,
         tgwAttachmentItem,
         transitGatewayAttachments,
       );
@@ -77,7 +70,6 @@ export class TgwCrossAccountResources extends AseaResource {
       const tgwAttachmentId = this.getTgwAttachmentId(
         vpcItem.name,
         tgwAttachmentItem.name,
-        this.props.mapping,
         owningAccount,
         vpcItem.region,
       );
@@ -92,25 +84,16 @@ export class TgwCrossAccountResources extends AseaResource {
    * @param region
    * @returns
    */
-  private getTgwAttachmentId(
-    vpcName: string,
-    tgwAttachmentName: string,
-    mapping: ASEAMappings,
-    accountKey: string,
-    region: string,
-  ) {
-    const vpcStacksInfo: ASEAMapping[] = [];
-    Object.keys(mapping).forEach(key => {
-      const stack = mapping[key];
-      if (stack.accountKey === accountKey && stack.phase === '1' && stack.region === region) {
-        stack.cfnResources = this.loadResourcesFromFile(stack);
-        vpcStacksInfo.push(stack);
-      }
-    });
-
-    let vpcStack: ASEAMapping | undefined;
+  private getTgwAttachmentId(vpcName: string, tgwAttachmentName: string, accountKey: string, region: string) {
+    if (!this.props.globalConfig.externalLandingZoneResources?.templateMap) {
+      return;
+    }
+    const vpcStacksInfo = this.props.globalConfig.externalLandingZoneResources.templateMap.filter(
+      stack => stack.accountKey === accountKey && stack.phase === 1 && stack.region === region && stack.nestedStack,
+    );
+    let vpcStack: AseaStackInfo | undefined;
     for (const vpcStackInfo of vpcStacksInfo) {
-      const vpcResource = this.findResourceByTypeAndTag(vpcStackInfo.cfnResources, RESOURCE_TYPE.VPC, vpcName);
+      const vpcResource = this.findResourceByTypeAndTag(vpcStackInfo.resources, RESOURCE_TYPE.VPC, vpcName);
       if (vpcResource) {
         vpcStack = vpcStackInfo;
         break;
@@ -120,7 +103,7 @@ export class TgwCrossAccountResources extends AseaResource {
       this.scope.addLogs(LogLevel.INFO, `VPC "${vpcName}" didn't find in ASEA Resource mapping`);
       return;
     }
-    const tgwAttachmentResources = this.filterResourcesByType(vpcStack.cfnResources, RESOURCE_TYPE.TGW_ATTACHMENT);
+    const tgwAttachmentResources = this.filterResourcesByType(vpcStack.resources, RESOURCE_TYPE.TGW_ATTACHMENT);
     if (tgwAttachmentResources.length === 0) return;
     const tgwAttachment = tgwAttachmentResources.find(tgwAttachResource =>
       tgwAttachResource.resourceMetadata['Properties'].Tags.find(
@@ -131,21 +114,18 @@ export class TgwCrossAccountResources extends AseaResource {
     return tgwAttachment.physicalResourceId;
   }
 
-  private getTgwRouteTableId(routeTableName: string, mapping: ASEAMappings) {
-    const tgwStackMappingKey = Object.keys(mapping).find(
-      key =>
-        mapping[key].accountKey === this.stackInfo.accountKey &&
-        mapping[key].region === this.stackInfo.region &&
-        mapping[key].phase === '0',
-    );
-
-    if (!tgwStackMappingKey) {
+  private getTgwRouteTableId(routeTableName: string) {
+    if (!this.props.globalConfig.externalLandingZoneResources?.templateMap) {
       return;
     }
-    const tgwStackMapping = mapping[tgwStackMappingKey];
-    tgwStackMapping.cfnResources = this.loadResourcesFromFile(tgwStackMapping);
+    const tgwStackMapping = this.props.globalConfig.externalLandingZoneResources.templateMap.find(
+      stackInfo =>
+        stackInfo.phase === 0 &&
+        stackInfo.accountKey === this.stackInfo.accountKey &&
+        stackInfo.region === this.stackInfo.region,
+    );
     const tgwRouteTableResources = this.filterResourcesByType(
-      tgwStackMapping.cfnResources ?? [],
+      tgwStackMapping?.resources ?? [],
       RESOURCE_TYPE.TRANSIT_GATEWAY_ROUTE_TABLE,
     );
     const tgwRouteTableResource = this.findResourceByTag(tgwRouteTableResources, routeTableName);
@@ -154,19 +134,17 @@ export class TgwCrossAccountResources extends AseaResource {
 
   private createTransitGatewayRouteTableAssociationPropagation(
     accountNames: string[],
-    mapping: ASEAMappings,
     tgwAttachmentItem: TransitGatewayAttachmentConfig,
     transitGatewayAttachments: { [name: string]: string },
   ) {
     for (const owningAccount of accountNames) {
-      this.createTgwPropagations(owningAccount, mapping, tgwAttachmentItem, transitGatewayAttachments);
-      this.createTgwAssociation(owningAccount, mapping, tgwAttachmentItem, transitGatewayAttachments);
+      this.createTgwPropagations(owningAccount, tgwAttachmentItem, transitGatewayAttachments);
+      this.createTgwAssociation(owningAccount, tgwAttachmentItem, transitGatewayAttachments);
     }
   }
 
   private createTgwAssociation(
     accountName: string,
-    mapping: ASEAMappings,
     tgwAttachmentItem: TransitGatewayAttachmentConfig,
     transitGatewayAttachments: { [name: string]: string },
   ) {
@@ -176,10 +154,10 @@ export class TgwCrossAccountResources extends AseaResource {
           association.resourceMetadata['Properties'].TransitGatewayAttachmentId.Ref ===
             transitGatewayAttachments[tgwAttachmentItem.name] &&
           association.resourceMetadata['Properties'].TransitGatewayRouteTableId ===
-            this.getTgwRouteTableId(routeTableItem, mapping),
+            this.getTgwRouteTableId(routeTableItem),
       );
       if (!tgwAssociationRes) continue;
-      const association = this.scope.getResource(
+      const association = this.stack.getResource(
         tgwAssociationRes.logicalResourceId,
       ) as cdk.aws_ec2.CfnTransitGatewayRouteTableAssociation;
       if (!association) {
@@ -198,7 +176,6 @@ export class TgwCrossAccountResources extends AseaResource {
 
   private createTgwPropagations(
     accountName: string,
-    mapping: ASEAMappings,
     tgwAttachmentItem: TransitGatewayAttachmentConfig,
     transitGatewayAttachments: { [name: string]: string },
   ) {
@@ -208,7 +185,7 @@ export class TgwCrossAccountResources extends AseaResource {
           propagation.resourceMetadata['Properties'].TransitGatewayAttachmentId.Ref ===
             transitGatewayAttachments[tgwAttachmentItem.name] &&
           propagation.resourceMetadata['Properties'].TransitGatewayRouteTableId ===
-            this.getTgwRouteTableId(routeTableItem, mapping),
+            this.getTgwRouteTableId(routeTableItem),
       );
       if (!tgwPropagationRes) continue;
       const propagation = this.stack.getResource(

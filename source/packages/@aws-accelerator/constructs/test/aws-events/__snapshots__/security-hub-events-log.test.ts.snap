@@ -101,7 +101,7 @@ exports[`SecurityHubEventsLog Construct(SecurityHubEventsLog):  Snapshot Test 1`
           ],
         },
         "Runtime": "nodejs18.x",
-        "Timeout": 180,
+        "Timeout": 60,
       },
       "Type": "AWS::Lambda::Function",
     },
@@ -126,9 +126,6 @@ exports[`SecurityHubEventsLog Construct(SecurityHubEventsLog):  Snapshot Test 1`
     },
     "SecurityHubEventsLogSecurityHubEventsFunctionSecurityHubEventsFunctionResourceF6D56745": {
       "DeletionPolicy": "Delete",
-      "DependsOn": [
-        "SecurityHubEventsLogSecurityHubEventsFunctionResourceLogGroupB7A99902",
-      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [

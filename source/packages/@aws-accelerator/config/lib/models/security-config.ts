@@ -340,8 +340,6 @@ export interface IGuardDutyConfig {
    * `deploymentTargets` should only be used when more granular control is required, not as a default configuration
    * Please only specify one of the `deploymentTargets` or `excludeRegions` properties.
    *
-   * Note: The delegated admin account defined in centralSecurityServices will always have GuardDuty enabled
-   *
    * @see {@link DeploymentTargets}
    */
   readonly deploymentTargets?: t.IDeploymentTargets;
@@ -612,7 +610,7 @@ export interface ISecurityHubLoggingConfig {
  */
 export interface ISecurityHubConfig {
   /**
-   * Indicates whether AWS Security Hub is enabled (AWSConfig is required for enabling SecurityHub)
+   * Indicates whether AWS Security Hub enabled.
    */
   readonly enable: boolean;
   /**
@@ -641,26 +639,6 @@ export interface ISecurityHubConfig {
    * (OPTIONAL) List of AWS Region names to be excluded from configuring Security Hub
    */
   readonly excludeRegions?: t.Region[];
-  /**
-   * (OPTIONAL) Deployment targets for SecurityHub
-   *
-   * We highly recommend enabling SecurityHub across all accounts and enabled regions within your organization.
-   * `deploymentTargets` should only be used when more granular control is required, not as a default configuration
-   * Please only specify one of the `deploymentTargets` or `excludeRegions` properties.
-   *
-   * Note: The delegated admin account defined in centralSecurityServices will always have SecurityHub enabled.
-   *
-   * @see {@link DeploymentTargets}
-   */
-  readonly deploymentTargets?: t.IDeploymentTargets;
-  /**
-   * (OPTIONAL) Enables/disables the auto enabling of SecurityHub for any account including the new accounts joining the organization
-   *
-   * It is recommended to set the value to `false` when using the `deploymentTargets` property to enable SecurityHub only on targeted accounts mentioned in the deploymentTargets. If you do not define or do not set it to `false` any new accounts joining the organization will automatically be enabled with SecurityHub.
-   *
-   * @default true
-   */
-  readonly autoEnableOrgMembers?: boolean;
   /**
    * Security Hub standards configuration
    */
@@ -1733,8 +1711,6 @@ export interface IAwsConfig {
    * `deploymentTargets` should only be used when more granular control is required, not as a default configuration.
    *
    * To enable AWS Config into Infrastructure organizational unit, you need to provide below value for this parameter.
-   *
-   * Note: The delegated admin account defined in centralSecurityServices will always have AwsConfig enabled
    *
    * @example
    * ```

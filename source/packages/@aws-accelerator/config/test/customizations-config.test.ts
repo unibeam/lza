@@ -106,8 +106,6 @@ describe('CustomizationsConfig', () => {
     const autoScalingConfig = new AutoScalingConfig();
     expect(autoScalingConfig.healthCheckGracePeriod).toEqual(undefined);
 
-    expect(autoScalingConfig.maxInstanceLifetime).toEqual(undefined);
-
     const appConfigItem = new AppConfigItem();
     expect(appConfigItem.targetGroups).toEqual(undefined);
   });

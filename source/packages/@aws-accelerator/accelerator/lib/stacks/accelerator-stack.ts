@@ -45,8 +45,6 @@ import {
   VpcConfig,
   VpcTemplatesConfig,
   isNetworkType,
-  SecurityHubConfig,
-  GuardDutyConfig,
 } from '@aws-accelerator/config';
 import { KeyLookup, S3LifeCycleRule, ServiceLinkedRole } from '@aws-accelerator/constructs';
 import { createLogger } from '@aws-accelerator/utils/lib/logger';
@@ -234,7 +232,7 @@ export abstract class AcceleratorStack extends cdk.Stack {
    * Accelerator SSM parameters
    * This array is used to store SSM parameters that are created per-stack.
    */
-  protected ssmParameters: { logicalId: string; parameterName: string; stringValue: string; scope?: string }[];
+  protected ssmParameters: { logicalId: string; parameterName: string; stringValue: string }[];
 
   protected centralLogsBucketName: string;
 
@@ -301,23 +299,21 @@ export abstract class AcceleratorStack extends cdk.Stack {
       props.globalConfig.externalLandingZoneResources?.resourceParameters?.[`${this.account}-${this.region}`];
 
     this.stackParameters = new Map<string, cdk.aws_ssm.StringParameter>();
-    if (!this.stackName.includes('Phase')) {
-      this.stackParameters.set(
-        'StackId',
-        new cdk.aws_ssm.StringParameter(this, 'SsmParamStackId', {
-          parameterName: this.getSsmPath(SsmResourceType.STACK_ID, [cdk.Stack.of(this).stackName]),
-          stringValue: cdk.Stack.of(this).stackId,
-        }),
-      );
+    this.stackParameters.set(
+      'StackId',
+      new cdk.aws_ssm.StringParameter(this, 'SsmParamStackId', {
+        parameterName: this.getSsmPath(SsmResourceType.STACK_ID, [cdk.Stack.of(this).stackName]),
+        stringValue: cdk.Stack.of(this).stackId,
+      }),
+    );
 
-      this.stackParameters.set(
-        'StackVersion',
-        new cdk.aws_ssm.StringParameter(this, 'SsmParamAcceleratorVersion', {
-          parameterName: this.getSsmPath(SsmResourceType.VERSION, [cdk.Stack.of(this).stackName]),
-          stringValue: version,
-        }),
-      );
-    }
+    this.stackParameters.set(
+      'StackVersion',
+      new cdk.aws_ssm.StringParameter(this, 'SsmParamAcceleratorVersion', {
+        parameterName: this.getSsmPath(SsmResourceType.VERSION, [cdk.Stack.of(this).stackName]),
+        stringValue: version,
+      }),
+    );
 
     //
     // Set if AWS KMS CMK is enabled for Lambda environment encryption
@@ -340,22 +336,6 @@ export abstract class AcceleratorStack extends cdk.Stack {
     // Set if S3 access log bucket is enabled
     //
     this.isAccessLogsBucketEnabled = this.accessLogsBucketEnabled();
-  }
-
-  /**
-   * Evaluates if inputConfig is enabled and either excludeRegions or deploymentTargets is defined. Returns false if region is excluded
-   * @param inputConfig {@link SecurityHubConfig} | {@link GuardDutyConfig}
-   * @returns boolean
-   */
-  protected validateExcludeRegionsAndDeploymentTargets(inputConfig: SecurityHubConfig | GuardDutyConfig): boolean {
-    return (
-      inputConfig.enable &&
-      (inputConfig.excludeRegions
-        ? inputConfig.excludeRegions.indexOf(this.region as Region) === -1
-        : inputConfig.deploymentTargets?.excludedRegions
-        ? inputConfig.deploymentTargets?.excludedRegions?.indexOf(this.region as Region) === -1
-        : true)
-    );
   }
 
   /**
@@ -1003,18 +983,16 @@ export abstract class AcceleratorStack extends cdk.Stack {
           : undefined;
         break;
       case AcceleratorKeyType.CLOUDWATCH_KEY:
-        if (!this.stackName.includes('Phase')) {
-          key = this.isCloudWatchLogsGroupCMKEnabled
-            ? cdk.aws_kms.Key.fromKeyArn(
+        key = this.isCloudWatchLogsGroupCMKEnabled
+          ? cdk.aws_kms.Key.fromKeyArn(
+              this,
+              'AcceleratorGetCloudWatchKey',
+              cdk.aws_ssm.StringParameter.valueForStringParameter(
                 this,
-                'AcceleratorGetCloudWatchKey',
-                cdk.aws_ssm.StringParameter.valueForStringParameter(
-                  this,
-                  this.acceleratorResourceNames.parameters.cloudWatchLogCmkArn,
-                ),
-              )
-            : undefined;
-        }
+                this.acceleratorResourceNames.parameters.cloudWatchLogCmkArn,
+              ),
+            )
+          : undefined;
         break;
       case AcceleratorKeyType.LAMBDA_KEY:
         key = this.isLambdaCMKEnabled
@@ -1282,7 +1260,7 @@ export abstract class AcceleratorStack extends cdk.Stack {
    * @param accountIds - List where processed account ids from Accounts array of DeploymentTarget or ShareTargets to be appended to.
    * @returns Array of Account Ids
    *
-   * @remarks Used only in getAccountIdsFromDeploymentTargets function.
+   * @remarks Used only in getAccountIdsFromDeploymentTarget function.
    */
   private appendAccountIdsFromDeploymentTargetAccounts(
     deploymentTargets: DeploymentTargets | ShareTargets,
@@ -1301,7 +1279,7 @@ export abstract class AcceleratorStack extends cdk.Stack {
    * @param accountIds - List where processed account ids from accountConfigs to be appended to.
    * @returns Array of Account Ids
    *
-   * @remarks Used only in getAccountIdsFromDeploymentTargets function.
+   * @remarks Used only in getAccountIdsFromDeploymentTarget function.
    */
   private appendAccountIdsFromAccountConfigs(
     ouName: string,
@@ -1326,9 +1304,9 @@ export abstract class AcceleratorStack extends cdk.Stack {
   /**
    * Function to get account ids from given DeploymentTarget
    * @param deploymentTargets
-   * @returns string[]
+   * @returns
    */
-  public getAccountIdsFromDeploymentTargets(deploymentTargets: DeploymentTargets): string[] {
+  public getAccountIdsFromDeploymentTarget(deploymentTargets: DeploymentTargets): string[] {
     const accountIds: string[] = [];
 
     for (const ou of deploymentTargets.organizationalUnits ?? []) {
@@ -1377,7 +1355,7 @@ export abstract class AcceleratorStack extends cdk.Stack {
       vpcAccountIds = [this.props.accountsConfig.getAccountId(vpcItem.account)];
     } else {
       const excludedAccountIds = this.getExcludedAccountIds(vpcItem.deploymentTargets);
-      vpcAccountIds = this.getAccountIdsFromDeploymentTargets(vpcItem.deploymentTargets).filter(
+      vpcAccountIds = this.getAccountIdsFromDeploymentTarget(vpcItem.deploymentTargets).filter(
         item => !excludedAccountIds.includes(item),
       );
     }
@@ -1853,12 +1831,11 @@ export abstract class AcceleratorStack extends cdk.Stack {
    * Public accessor method to add SSM parameters
    * @param props
    */
-  public addSsmParameter(props: { logicalId: string; parameterName: string; stringValue: string; scope?: string }) {
+  public addSsmParameter(props: { logicalId: string; parameterName: string; stringValue: string }) {
     this.ssmParameters.push({
       logicalId: props.logicalId,
       parameterName: props.parameterName,
       stringValue: props.stringValue,
-      scope: props.scope,
     });
   }
 
@@ -1878,8 +1855,7 @@ export abstract class AcceleratorStack extends cdk.Stack {
         r.accountId === cdk.Stack.of(this).account &&
         r.region === cdk.Stack.of(this).region &&
         r.resourceType === resourceType &&
-        r.resourceIdentifier === resourceIdentifier &&
-        !r.isDeleted,
+        r.resourceIdentifier === resourceIdentifier,
     );
   }
 
@@ -1894,9 +1870,7 @@ export abstract class AcceleratorStack extends cdk.Stack {
   public isManagedByAseaGlobal(resourceType: string, resourceIdentifier: string): boolean {
     if (!this.props.globalConfig.externalLandingZoneResources?.importExternalLandingZoneResources) return false;
     const aseaResourceList = this.props.globalConfig.externalLandingZoneResources.resourceList;
-    return !!aseaResourceList.find(
-      r => r.resourceType === resourceType && r.resourceIdentifier === resourceIdentifier && !r.isDeleted,
-    );
+    return !!aseaResourceList.find(r => r.resourceType === resourceType && r.resourceIdentifier === resourceIdentifier);
   }
 
   public getExternalResourceParameter(name: string) {

@@ -97,7 +97,6 @@ export interface LzaLambdaProps {
  */
 export class LzaLambda extends Construct {
   public readonly resource: cdk.aws_lambda.IFunction;
-  public readonly logGroup: cdk.aws_logs.LogGroup;
 
   constructor(scope: Construct, id: string, props: LzaLambdaProps) {
     super(scope, id);
@@ -116,7 +115,7 @@ export class LzaLambda extends Construct {
       environment: this.prepareLambdaEnvironments(props),
     });
 
-    this.logGroup = new cdk.aws_logs.LogGroup(this, `${this.resource.node.id}LogGroup`, {
+    new cdk.aws_logs.LogGroup(this, `${this.resource.node.id}LogGroup`, {
       logGroupName: `/aws/lambda/${this.resource.functionName}`,
       retention: props.cloudWatchLogRetentionInDays,
       encryptionKey: props.cloudWatchLogKmsKey,

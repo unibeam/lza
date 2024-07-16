@@ -66,7 +66,6 @@ export class FirewallAutoScalingGroup extends Firewall implements IFirewallAutoS
       lambdaKey: props.lambdaKey,
       cloudWatchLogKmsKey: props.cloudWatchLogKmsKey,
       cloudWatchLogRetentionInDays: props.cloudWatchLogRetentionInDays,
-      maxInstanceLifetime: props.autoscaling.maxInstanceLifetime,
       nagSuppressionPrefix: `${id}/Resource`,
     });
 

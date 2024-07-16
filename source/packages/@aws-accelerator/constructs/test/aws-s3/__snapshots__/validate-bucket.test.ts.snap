@@ -289,9 +289,6 @@ exports[`ValidateBucketKmsEncryption Construct(ValidateBucketKmsEncryption):  Sn
     },
     "ValidateBucketKmsEncryptionValidateBucketValidateBucketResource2FD53956": {
       "DeletionPolicy": "Delete",
-      "DependsOn": [
-        "ValidateBucketKmsEncryptionValidateBucketFunctionResourceLogGroup0C70290F",
-      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -575,9 +572,6 @@ exports[`ValidateBucketKmsEncryption Construct(ValidateBucketKmsEncryption):  Sn
     },
     "ValidateBucketS3EncryptionValidateBucketValidateBucketResource8AFD01C8": {
       "DeletionPolicy": "Delete",
-      "DependsOn": [
-        "ValidateBucketS3EncryptionValidateBucketFunctionResourceLogGroup9806F780",
-      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -1018,9 +1012,6 @@ exports[`ValidateBucketS3Encryption Construct(ValidateBucketS3Encryption):  Snap
     },
     "ValidateBucketKmsEncryptionValidateBucketValidateBucketResource2FD53956": {
       "DeletionPolicy": "Delete",
-      "DependsOn": [
-        "ValidateBucketKmsEncryptionValidateBucketFunctionResourceLogGroup0C70290F",
-      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -1304,9 +1295,6 @@ exports[`ValidateBucketS3Encryption Construct(ValidateBucketS3Encryption):  Snap
     },
     "ValidateBucketS3EncryptionValidateBucketValidateBucketResource8AFD01C8": {
       "DeletionPolicy": "Delete",
-      "DependsOn": [
-        "ValidateBucketS3EncryptionValidateBucketFunctionResourceLogGroup9806F780",
-      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [

@@ -1,6 +1,6 @@
 import {
-  ASEAMappings,
   AseaResourceType,
+  AseaStackInfo,
   CfnResourceType,
   TransitGatewayConfig,
   TransitGatewayRouteEntryConfig,
@@ -13,7 +13,6 @@ import {
 } from '@aws-accelerator/config';
 import { AseaResource, AseaResourceProps } from './resource';
 import { ImportAseaResourcesStack, LogLevel } from '../stacks/import-asea-resources-stack';
-import { ImportStackResources } from '../../utils/import-stack-resources';
 
 enum RESOURCE_TYPE {
   TGW_ROUTE = 'AWS::EC2::TransitGatewayRoute',
@@ -21,59 +20,40 @@ enum RESOURCE_TYPE {
   VPC = 'AWS::EC2::VPC',
   TGW_ATTACHMENT = 'AWS::EC2::TransitGatewayAttachment',
 }
-const ASEA_PHASE_NUMBERS = ['0', '1', '3'];
+const ASEA_PHASE_NUMBER = 3;
 
 export class TransitGatewayRoutes extends AseaResource {
-  props: AseaResourceProps;
+  private readonly props: AseaResourceProps;
   private transitGatewayRouteTables: Map<string, string> = new Map<string, string>();
   private allRoutes!: CfnResourceType[];
   private allRouteTables!: CfnResourceType[];
+  private tgwStackInfo: AseaStackInfo | undefined;
   constructor(scope: ImportAseaResourcesStack, props: AseaResourceProps) {
     super(scope, props);
     this.props = props;
-    if (!ASEA_PHASE_NUMBERS.includes(props.stackInfo.phase!)) {
+    if (props.stackInfo.phase !== ASEA_PHASE_NUMBER) {
       this.scope.addLogs(LogLevel.INFO, `No Resources to handle in stack ${props.stackInfo.stackName}`);
       return;
     }
-    const stackRoutes = this.scope.importStackResources.getResourcesByType(RESOURCE_TYPE.TGW_ROUTE);
-    const nestedStackRoutes = this.getTgwRoutesFromNestedStacks();
-    this.allRoutes = [...stackRoutes, ...nestedStackRoutes];
-    this.scope.addLogs(LogLevel.INFO, `All routes: ${JSON.stringify(this.allRoutes)}`);
+    this.allRoutes = this.filterResourcesByType(props.stackInfo.resources, RESOURCE_TYPE.TGW_ROUTE);
     if (this.allRoutes.length === 0) return;
     /**
      * Load tgw stack resources for current account at once
      */
-    const mappings = this.props.globalConfig.externalLandingZoneResources?.templateMap || {};
-    const tgwStackKey = Object.keys(mappings).find(
-      key =>
+    this.tgwStackInfo = this.props.globalConfig.externalLandingZoneResources!.templateMap.find(
+      stack =>
         // Using accountId instead of accountKey to avoid mismatch of accountKey between ASEA and LZA
-        mappings[key].accountId === props.stackInfo.accountId &&
-        mappings[key].phase === '0' &&
-        mappings[key].region === this.stackInfo.region,
+        stack.accountId === props.stackInfo.accountId && stack.phase === 0 && stack.region === this.stackInfo.region,
     );
-    if (!tgwStackKey) {
-      return;
-    }
-    const tgwStackMapping = mappings[tgwStackKey];
-    const tgwResources = ImportStackResources.initSync({ stackMapping: tgwStackMapping });
-
-    this.allRouteTables = tgwResources.getResourcesByType(RESOURCE_TYPE.TGW_ROUTE_TABLE);
-    this.scope.addLogs(LogLevel.INFO, `All route tables: ${JSON.stringify(this.allRouteTables)}`);
+    if (!this.tgwStackInfo) return;
+    this.allRouteTables = this.filterResourcesByType(this.tgwStackInfo.resources, RESOURCE_TYPE.TGW_ROUTE_TABLE);
     for (const tgwItem of props.networkConfig.transitGateways.filter(
       tgw => tgw.account === props.stackInfo.accountKey && tgw.region === props.stackInfo.region,
     ) ?? []) {
-      this.setTransitGatewayResourcesMap(tgwItem, tgwResources);
+      this.setTransitGatewayResourcesMap(tgwItem);
     }
     for (const tgwItem of props.networkConfig.transitGateways ?? []) {
       for (const routeTableItem of tgwItem.routeTables ?? []) {
-        this.scope.addLogs(
-          LogLevel.INFO,
-          `Creating static route items for tgw ${tgwItem.name} and route table ${routeTableItem.name}`,
-        );
-        this.scope.addLogs(
-          LogLevel.INFO,
-          `Routes identified in route table ${routeTableItem.name}: ${JSON.stringify(routeTableItem.routes)}`,
-        );
         this.createTransitGatewayStaticRouteItems(tgwItem, routeTableItem);
       }
     }
@@ -84,16 +64,11 @@ export class TransitGatewayRoutes extends AseaResource {
    * @param tgwItem
    * @returns
    */
-  private setTransitGatewayResourcesMap(tgwItem: TransitGatewayConfig, tgwStackMapping: ImportStackResources) {
+  private setTransitGatewayResourcesMap(tgwItem: TransitGatewayConfig) {
     for (const routeTableItem of tgwItem.routeTables ?? []) {
       // ASEA RouteTable name includes TGW Name. No need to use TGW Id since TGW names are unique
-      const routeTableResource = tgwStackMapping.getResourceByTypeAndTag(
-        RESOURCE_TYPE.TGW_ROUTE_TABLE,
-        routeTableItem.name,
-      );
-      if (!routeTableResource || !routeTableResource.physicalResourceId) {
-        continue;
-      }
+      const routeTableResource = this.findResourceByTag(this.allRouteTables, routeTableItem.name);
+      if (!routeTableResource) continue;
       this.transitGatewayRouteTables.set(
         `${tgwItem.name}_${routeTableItem.name}`,
         routeTableResource.physicalResourceId,
@@ -108,38 +83,32 @@ export class TransitGatewayRoutes extends AseaResource {
    * @param region
    * @returns
    */
-  private getTgwAttachmentId(vpcName: string, accountKey: string, region: string, mappings: ASEAMappings) {
-    this.scope.addLogs(LogLevel.INFO, `Getting TGW attachment id for vpc ${vpcName} in account ${accountKey}`);
-    if (!mappings) {
+  private getTgwAttachmentId(vpcName: string, accountKey: string, region: string) {
+    if (!this.props.globalConfig.externalLandingZoneResources?.templateMap) {
       return;
     }
-    const vpcStackKey = Object.keys(mappings).find(
-      key =>
-        mappings[key].accountId === this.props.accountsConfig.getAccountId(accountKey) &&
-        mappings[key].phase === '1' &&
-        mappings[key].region === region &&
-        mappings[key].nestedStacks,
+    const vpcStacksInfo = this.props.globalConfig.externalLandingZoneResources.templateMap.filter(
+      stack =>
+        stack.accountId === this.props.accountsConfig.getAccountId(accountKey) &&
+        stack.phase === 1 &&
+        stack.region === region &&
+        stack.nestedStack,
     );
-    if (!vpcStackKey) {
-      return;
-    }
-    const vpcResourceMapping = mappings[vpcStackKey];
-    const vpcResources = ImportStackResources.initSync({ stackMapping: vpcResourceMapping });
-    let tgwVpcResources: ImportStackResources | undefined;
-    for (const [, vpcStackResources] of Object.entries(vpcResources.nestedStackResources ?? {})) {
-      const vpcResource = vpcStackResources.getResourceByTypeAndTag(RESOURCE_TYPE.VPC, vpcName);
+    let vpcStack: AseaStackInfo | undefined;
+    for (const vpcStackInfo of vpcStacksInfo) {
+      const vpcResource = this.findResourceByTypeAndTag(vpcStackInfo.resources, RESOURCE_TYPE.VPC, vpcName);
       if (vpcResource) {
-        tgwVpcResources = vpcStackResources;
+        vpcStack = vpcStackInfo;
         break;
       }
     }
-    if (!tgwVpcResources) {
+    if (!vpcStack) {
       this.scope.addLogs(LogLevel.INFO, `VPC "${vpcName}" didn't find in ASEA Resource mapping`);
-    }
-    const tgwAttachmentResources = tgwVpcResources?.getResourcesByType(RESOURCE_TYPE.TGW_ATTACHMENT);
-    if (!tgwAttachmentResources || tgwAttachmentResources?.length === 0) {
       return;
     }
+    const tgwAttachmentResources = this.filterResourcesByType(vpcStack.resources, RESOURCE_TYPE.TGW_ATTACHMENT);
+    if (tgwAttachmentResources.length === 0) return;
+    // ASEA Only supports one tgw-attach for vpc
     return tgwAttachmentResources[0].physicalResourceId;
   }
 
@@ -158,7 +127,6 @@ export class TransitGatewayRoutes extends AseaResource {
     routeId: string;
     transitGatewayAttachmentId?: string;
   } {
-    const mappings = this.props.globalConfig.externalLandingZoneResources!.templateMap;
     let routeId = '';
     let transitGatewayAttachmentId: string | undefined;
     if (routeItem.attachment) {
@@ -178,20 +146,7 @@ export class TransitGatewayRoutes extends AseaResource {
           routeItem.attachment.vpcName,
           routeItem.attachment.account,
           tgwItem.region,
-          mappings,
         );
-        if (!transitGatewayAttachmentId) {
-          this.scope.addLogs(
-            LogLevel.INFO,
-            `TGW attachment not found in account ${routeItem.attachment.account}, looking in ${tgwItem.account}`,
-          );
-          transitGatewayAttachmentId = this.getTgwAttachmentId(
-            routeItem.attachment.vpcName,
-            tgwItem.account,
-            tgwItem.region,
-            mappings,
-          );
-        }
       }
 
       // If route is for DX Gateway attachment
@@ -290,7 +245,7 @@ export class TransitGatewayRoutes extends AseaResource {
       routeItem.destinationCidrBlock,
       routeItem.blackhole,
     );
-    if (!routePhysicalId || !routeId) {
+    if (!routePhysicalId) {
       return;
     }
     this.scope.addAseaResource(AseaResourceType.TRANSIT_GATEWAY_ROUTE, routeId);
@@ -310,22 +265,5 @@ export class TransitGatewayRoutes extends AseaResource {
           (blackhole && resourceMetadata['Properties'].Blackhole)),
     );
     return route?.physicalResourceId;
-  }
-
-  private getTgwRoutesFromNestedStacks() {
-    const nestedRoutes = [];
-    for (const [, nestedStackResources] of Object.entries(this.scope.nestedStackResources ?? {})) {
-      this.scope.addLogs(
-        LogLevel.INFO,
-        `Looking for TGW routes in nested stack ${nestedStackResources.stackMapping.stackName}`,
-      );
-      const tgwRoutes = nestedStackResources.getResourcesByType(RESOURCE_TYPE.TGW_ROUTE);
-      this.scope.addLogs(
-        LogLevel.INFO,
-        `Found ${tgwRoutes.length} TGW routes in nested stack ${nestedStackResources.stackMapping.stackName}`,
-      );
-      nestedRoutes.push(...tgwRoutes);
-    }
-    return nestedRoutes;
   }
 }

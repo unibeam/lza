@@ -23,8 +23,6 @@ const stack = new cdk.Stack();
 new SecurityHubMembers(stack, 'SecurityHubMembers', {
   kmsKey: new cdk.aws_kms.Key(stack, 'CustomKey', {}),
   logRetentionInDays: 3653,
-  securityHubMemberAccountIds: [],
-  autoEnableOrgMembers: true,
 });
 
 /**

@@ -22,8 +22,8 @@ import {
   ResourcePolicyEnforcementConfig,
   GuardDutyConfig,
   Region,
+  AccountsConfig,
   DeploymentTargets,
-  SecurityHubConfig,
 } from '@aws-accelerator/config';
 import {
   Bucket,
@@ -49,20 +49,21 @@ import {
   NagSuppressionRuleIds,
 } from './accelerator-stack';
 import { SnsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import { CommonValidatorFunctions } from '@aws-accelerator/config';
 
 export class SecurityAuditStack extends AcceleratorStack {
   private readonly s3Key: cdk.aws_kms.IKey | undefined;
   private readonly cloudwatchKey: cdk.aws_kms.IKey | undefined;
   private readonly centralLogsBucketKey: cdk.aws_kms.IKey;
   private readonly replicationProps: BucketReplicationProps;
-  private readonly securityHubConfig: SecurityHubConfig;
+
   constructor(scope: Construct, id: string, props: AcceleratorStackProps) {
     super(scope, id, props);
 
     this.s3Key = this.getAcceleratorKey(AcceleratorKeyType.S3_KEY);
     this.cloudwatchKey = this.getAcceleratorKey(AcceleratorKeyType.CLOUDWATCH_KEY);
     this.centralLogsBucketKey = this.getCentralLogsBucketKey(this.cloudwatchKey);
-    this.securityHubConfig = this.props.securityConfig.centralSecurityServices.securityHub;
+
     this.replicationProps = {
       destination: {
         bucketName: this.centralLogsBucketName,
@@ -83,7 +84,7 @@ export class SecurityAuditStack extends AcceleratorStack {
     //
     // GuardDuty configuration
     //
-    this.configureGuardDuty(this.props.securityConfig.centralSecurityServices.guardduty);
+    this.configureGuardDuty(this.props.securityConfig.centralSecurityServices.guardduty, this.props.accountsConfig);
 
     //
     // Audit Manager configuration
@@ -181,14 +182,24 @@ export class SecurityAuditStack extends AcceleratorStack {
    * Function to configure GuardDuty
    * @param guardDutyConfig GuardDutyConfig
    */
-  private configureGuardDuty(guardDutyConfig: GuardDutyConfig) {
+  private configureGuardDuty(guardDutyConfig: GuardDutyConfig, accountsConfig: AccountsConfig) {
     this.logger.debug(`centralSecurityServices.guardduty.enable: ${guardDutyConfig.enable}`);
 
-    if (this.validateExcludeRegionsAndDeploymentTargets(guardDutyConfig)) {
+    if (
+      guardDutyConfig.enable &&
+      (guardDutyConfig.excludeRegions
+        ? guardDutyConfig.excludeRegions.indexOf(this.region as Region) === -1
+        : guardDutyConfig.deploymentTargets?.excludedRegions
+        ? guardDutyConfig.deploymentTargets?.excludedRegions?.indexOf(this.region as Region) === -1
+        : true)
+    ) {
       const guardDutyMemberAccountIds: string[] = [];
       if (guardDutyConfig.deploymentTargets) {
         guardDutyMemberAccountIds.push(
-          ...this.getAccountIdsFromDeploymentTargets(guardDutyConfig.deploymentTargets as DeploymentTargets),
+          ...CommonValidatorFunctions.getAccountIdsFromDeploymentTargets(
+            accountsConfig,
+            guardDutyConfig.deploymentTargets as DeploymentTargets,
+          ),
         );
       }
 
@@ -385,37 +396,29 @@ export class SecurityAuditStack extends AcceleratorStack {
    * Function to configure SecurityHub
    */
   private configureSecurityHub() {
-    this.logger.debug(`centralSecurityServices.securityHub.enable: ${this.securityHubConfig.enable}`);
-    if (this.validateExcludeRegionsAndDeploymentTargets(this.securityHubConfig)) {
-      const securityHubMemberAccountIds: string[] = [];
-      if (this.securityHubConfig.deploymentTargets) {
-        securityHubMemberAccountIds.push(
-          ...this.getAccountIdsFromDeploymentTargets(this.securityHubConfig.deploymentTargets as DeploymentTargets),
-        );
-      }
-
-      this.logger.info(
-        securityHubMemberAccountIds.length > 0
-          ? `Enabling SecurityHub for accounts defined in SecurityHub deploymentTargets`
-          : 'Enabling SecurityHub for all existing accounts',
-      );
-
+    this.logger.debug(
+      `centralSecurityServices.securityHub.enable: ${this.props.securityConfig.centralSecurityServices.securityHub.enable}`,
+    );
+    if (
+      this.props.securityConfig.centralSecurityServices.securityHub.enable &&
+      this.props.securityConfig.centralSecurityServices.securityHub.excludeRegions.indexOf(
+        cdk.Stack.of(this).region as Region,
+      ) === -1
+    ) {
       this.logger.info('Adding SecurityHub ');
 
       new SecurityHubMembers(this, 'SecurityHubMembers', {
         kmsKey: this.cloudwatchKey,
         logRetentionInDays: this.props.globalConfig.cloudwatchLogRetentionInDays,
-        securityHubMemberAccountIds,
-        autoEnableOrgMembers: this.securityHubConfig.autoEnableOrgMembers ?? true,
       });
     }
 
     this.logger.debug(
-      `centralSecurityServices.securityHub.regionAggregation: ${this.securityHubConfig.regionAggregation}`,
+      `centralSecurityServices.securityHub.regionAggregation: ${this.props.securityConfig.centralSecurityServices.securityHub.regionAggregation}`,
     );
     if (
-      this.securityHubConfig.enable &&
-      this.securityHubConfig.regionAggregation &&
+      this.props.securityConfig.centralSecurityServices.securityHub.enable &&
+      this.props.securityConfig.centralSecurityServices.securityHub.regionAggregation &&
       this.props.globalConfig.homeRegion == cdk.Stack.of(this).region
     ) {
       this.logger.info('Enabling region aggregation for SecurityHub in the Home Region');

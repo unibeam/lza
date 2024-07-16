@@ -4210,7 +4210,7 @@ exports[`SecurityResourcesStack Construct(SecurityResourcesStack):  Snapshot Tes
           ],
         },
         "Runtime": "nodejs18.x",
-        "Timeout": 180,
+        "Timeout": 60,
       },
       "Type": "AWS::Lambda::Function",
     },
@@ -4235,9 +4235,6 @@ exports[`SecurityResourcesStack Construct(SecurityResourcesStack):  Snapshot Tes
     },
     "SecurityHubEventsLogSecurityHubEventsFunctionSecurityHubEventsFunctionResourceF6D56745": {
       "DeletionPolicy": "Delete",
-      "DependsOn": [
-        "SecurityHubEventsLogSecurityHubEventsFunctionResourceLogGroupB7A99902",
-      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -4591,7 +4588,7 @@ exports[`SecurityResourcesStack Construct(SecurityResourcesStack):  Snapshot Tes
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-SecurityResourcesStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.8.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },
@@ -7459,7 +7456,7 @@ exports[`delegatedAdminStack Construct(SecurityResourcesStack):  Snapshot Test 1
           ],
         },
         "Runtime": "nodejs18.x",
-        "Timeout": 180,
+        "Timeout": 60,
       },
       "Type": "AWS::Lambda::Function",
     },
@@ -7484,9 +7481,6 @@ exports[`delegatedAdminStack Construct(SecurityResourcesStack):  Snapshot Test 1
     },
     "SecurityHubEventsLogSecurityHubEventsFunctionSecurityHubEventsFunctionResourceF6D56745": {
       "DeletionPolicy": "Delete",
-      "DependsOn": [
-        "SecurityHubEventsLogSecurityHubEventsFunctionResourceLogGroupB7A99902",
-      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -7829,7 +7823,7 @@ exports[`delegatedAdminStack Construct(SecurityResourcesStack):  Snapshot Test 1
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-SecurityResourcesStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.8.0",
+        "Value": "1.7.1",
       },
       "Type": "AWS::SSM::Parameter",
     },

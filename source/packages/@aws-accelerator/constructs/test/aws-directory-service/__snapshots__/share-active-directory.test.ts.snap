@@ -75,9 +75,6 @@ exports[`ShareActiveDirectory Construct(ShareActiveDirectory):  Snapshot Test 1`
     },
     "ShareActiveDirectory09C8BFAC": {
       "DeletionPolicy": "Delete",
-      "DependsOn": [
-        "ShareActiveDirectoryShareManageActiveDirectoryFunctionLogGroupB93888CF",
-      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [

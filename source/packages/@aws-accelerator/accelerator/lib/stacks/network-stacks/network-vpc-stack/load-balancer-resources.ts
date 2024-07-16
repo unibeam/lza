@@ -472,7 +472,7 @@ export class LoadBalancerResources {
     );
     const accountIdTargetsForVpcTemplates =
       vpcTemplatesWithTargetGroups?.map(vpcTemplate =>
-        this.stack.getAccountIdsFromDeploymentTargets(vpcTemplate.deploymentTargets),
+        this.stack.getAccountIdsFromDeploymentTarget(vpcTemplate.deploymentTargets),
       ) ?? [];
     const principalAccountIds = [...accountIdTargetsForVpcs, ...accountIdTargetsForVpcTemplates];
     principalAccountIds.push(cdk.Stack.of(this.stack).account);

@@ -10,7 +10,6 @@ import { ConfiguredRetryStrategy } from '@aws-sdk/util-retry';
 import { createLogger } from './logger';
 import { glob } from 'glob';
 import { dirname } from 'path';
-import * as fs from 'fs';
 const logger = createLogger(['utils-common-functions']);
 
 export function chunkArray<Type>(array: Type[], chunkSize: number): Type[][] {
@@ -29,7 +28,6 @@ export async function getCrossAccountCredentials(
   region: string,
   partition: string,
   managementAccountAccessRole: string,
-  sessionName?: string,
 ) {
   const stsClient = new STSClient({
     region: region,
@@ -38,7 +36,7 @@ export async function getCrossAccountCredentials(
   });
   const stsParams: AssumeRoleCommandInput = {
     RoleArn: `arn:${partition}:iam::${accountId}:role/${managementAccountAccessRole}`,
-    RoleSessionName: sessionName ?? 'acceleratorBootstrapCheck',
+    RoleSessionName: 'acceleratorBootstrapCheck',
     DurationSeconds: 3600,
   };
   let assumeRoleCredential: AssumeRoleCommandOutput | undefined = undefined;
@@ -47,7 +45,9 @@ export async function getCrossAccountCredentials(
     if (assumeRoleCredential) {
       return assumeRoleCredential;
     } else {
-      throw new Error(`Error assuming role ${managementAccountAccessRole} in account ${accountId} ${sessionName}`);
+      throw new Error(
+        `Error assuming role ${managementAccountAccessRole} in account ${accountId} for bootstrap checks`,
+      );
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
@@ -186,23 +186,5 @@ export function getGlobalRegion(partition: string): string {
       return 'cn-northwest-1';
     default:
       return 'us-east-1';
-  }
-}
-
-export async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.promises.stat(filePath);
-    return true;
-  } catch (err) {
-    return false;
-  }
-}
-
-export async function directoryExists(directory: string): Promise<boolean> {
-  try {
-    const stats = await fs.promises.stat(directory);
-    return stats.isDirectory();
-  } catch (err) {
-    return false;
   }
 }

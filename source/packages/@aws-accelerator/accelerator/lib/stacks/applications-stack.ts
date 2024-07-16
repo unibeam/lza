@@ -532,7 +532,6 @@ export class ApplicationsStack extends AcceleratorStack {
         lambdaKey,
         cloudWatchLogKmsKey,
         cloudWatchLogRetentionInDays,
-        maxInstanceLifetime: appConfigItem.autoscaling.maxInstanceLifetime ?? undefined,
       },
     );
 
