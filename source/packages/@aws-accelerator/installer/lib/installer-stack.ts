@@ -175,7 +175,7 @@ export class InstallerStack extends cdk.Stack {
   private readonly enableDiagnosticsPack = new cdk.CfnParameter(this, 'EnableDiagnosticsPack', {
     type: 'String',
     allowedValues: ['Yes', 'No'],
-    default: 'Yes',
+    default: 'No',
     description:
       'Select Yes if deploying the solution with diagnostics pack enabled. Diagnostics pack enables you to generate root cause reports to potentially diagnose pipeline failures.',
   });
