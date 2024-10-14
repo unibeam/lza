@@ -219,7 +219,7 @@ exports[`GetCloudFormationResourceType Construct(GetCloudFormationResourceType):
             "Arn",
           ],
         },
-        "Runtime": "nodejs18.x",
+        "Runtime": "nodejs20.x",
         "Timeout": 900,
       },
       "Type": "AWS::Lambda::Function",
@@ -327,6 +327,9 @@ exports[`GetCloudFormationResourceType Construct(GetCloudFormationResourceType):
     },
     "TestGetCloudFormationResourceTypeGetCloudFormationResourceTypeResource41628DFB": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "TestGetCloudFormationResourceTypeGetCloudFormationResourceTypeFunctionLogGroup602C5B86",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [

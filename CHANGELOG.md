@@ -5,6 +5,91 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] - 08-26-2024
+
+### Fixed
+
+- fix(metadata): fixed config file writes with codecommit
+- fix(validation): configuration validation failure when SecurityHub was enabled with Control Tower
+- fix(control-tower): skip existing ct identifier check when ct is not enabled
+
+### Changed
+
+- chore: add security.md file to repo
+
+## [1.9.1] - 08-09-2024
+
+### Changed
+
+- chore: upgrade github action to node20
+
+### Configuration Changes
+
+- chore(lza-sample-config): enhance SCP statements for invocation of Lambda functions
+
+## [1.9.0] - 07-25-2024
+
+### Added
+
+- feat(s3): added use of S3 as a configuration repository location
+- feat(network): allow Route53 resolver endpoints and query logging to be defined in the VPC object.
+- feat(control-tower): integrate lz management and lz baseline api
+- feat(control-tower) integrate lz management and baseline api for external account deployment
+- feat(control-tower): lz management api gov cloud support
+- feat(control-tower): add global region into the Control Tower governed region list
+- feat(logging): add cloudwatch log group data protection policy
+- feat(securityhub): allow custom cloudwatch log group for events
+
+### Fixed
+
+- fix(bootstrap): Failed to publish asset when cdkOptions.centralizeBuckets: true
+- fix(control-tower): add validation to check incorrect landing zone version in global config
+- fix(control-tower): new lza installation overrides existing control tower settings
+- fix(organizations): unable to create ou with same name under different parent
+- fix(organization): ou baseline operation should be skipped when Control Tower is not enabled
+
+### Changed
+
+- chore: add commitlint to precommit hook
+- chore: upgrade cdk to 2.148.0
+- chore: bump cdk bootstrap to 20
+- chore(documentation): update opt-in region requirement for Control Tower deployment
+- chore(documentation): update merge request template to add unit test information
+- chore(test): update all-enabled custom config rule lambda python version
+
+## [1.8.1] - 07-03-2024
+
+### Fixed
+
+- fix(networking): Fix undefined condition for transitGatewayCidrBlocks property for Transit Gateway.
+- bug(pipeline): Suppress mapping bucket results from build log
+- fix(pipeline): "find: ‘./cdk.out’: No such file or directory" error in diff stage
+- fix(config): update global config cdkoptions and control tower settings
+- fix(security-hub): Fixed SecurityHub error "exceeds maximum number of members can be created in a single request"
+
+## [1.8.0] - 06-28-2024
+
+### Added
+
+- feat(networking): Add transit gateway static CIDR blocks and Transit Gateway Connect attachments
+- feat(autoScalingGroup): Add option to set maxInstanceLifetime property for AutoScalingGroups
+- feat(securityHub): Allow SecurityHub to be enabled when AwsConfig is enabled with deploymentTargets option
+- feat(customizations): Add option to set maxInstanceLifetime property for AutoScalingGroups
+
+### Changed
+
+- chore(github): added automated testing to GitHub repo for external PRs
+- chore(networking): update function signatures for vpc resources in network vpc stack
+
+### Fixed
+
+- fix(organizations): throttling on ListAccounts call
+- fix(control-tower): The baseline 'AWSControlTowerBaseline' cannot be enabled on renamed OUs
+- fix(control-tower): change organizations module execution condition
+- fix(diff): "Unexpected end of JSON input" error closes [#497](https://github.com/awslabs/landing-zone-accelerator-on-aws/issues/497)
+- fix(configrule): Update config rule remediation validation when using KMSMasterKey replacement value
+- fix(construct): LZA fails with AWS::Logs::LogGroup already exists
+
 ## [1.7.1] - 06-14-2024
 
 ### Added

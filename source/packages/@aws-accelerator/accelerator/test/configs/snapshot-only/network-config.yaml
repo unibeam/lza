@@ -3,10 +3,31 @@ defaultVpc:
   delete: true
   excludeAccounts: []
   excludeRegions: []
+
+transitGatewayConnects:
+  - name: Network-Inspection
+    region: *HOME_REGION
+    transitGateway:
+      name: Network-Main
+      account: Network
+    vpc:
+      vpcName: Network-Endpoints
+      vpcAttachment: Network-Endpoints
+    options:
+      protocol: gre
+    tags:
+      - key: Environment
+        value: CentralInspection
+
 transitGateways:
   - name: Network-Main
     account: Network
     region: *HOME_REGION
+    transitGatewayCidrBlocks:
+      - 10.0.0.0/20
+      - 10.5.0.0/20
+    transitGatewayIpv6CidrBlocks:
+      - 2001:db8::/64
     shareTargets:
       organizationalUnits:
         - Infrastructure
@@ -65,6 +86,8 @@ transitGateways:
   - name: Network-Main-2
     account: Network
     region: *HOME_REGION
+    transitGatewayCidrBlocks:
+      - 10.50.0.0/20
     shareTargets:
       organizationalUnits:
         - Infrastructure
@@ -96,6 +119,8 @@ transitGateways:
   - name: SharedServices-Main
     account: SharedServices
     region: *HOME_REGION
+    transitGatewayIpv6CidrBlocks:
+      - 5000:aaaa::/64
     shareTargets:
       organizationalUnits:
         - Infrastructure
@@ -121,6 +146,19 @@ transitGateways:
         routes:
           - destinationPrefixList: accelerator-prefix-list-001
             blackhole: true
+  - name: SharedServices-SecondaryTgw
+    account: SharedServices
+    region: *HOME_REGION
+    shareTargets:
+      organizationalUnits:
+        - Infrastructure
+    asn: 65524
+    dnsSupport: enable
+    vpnEcmpSupport: enable
+    defaultRouteTableAssociation: disable
+    defaultRouteTablePropagation: disable
+    autoAcceptSharingAttachments: disable
+    routeTables: []
 transitGatewayPeering:
   - name: Network-Main-And-SharedServices-Main-Peering
     requester:
@@ -1555,6 +1593,8 @@ vpcs:
             destination: Network-InspectionTgwAttach-B
             type: gatewayLoadBalancerEndpoint
             target: Endpoint-B
+      - name: Network-Inspection-Local-Rt-A
+        routes: []
     subnets:
       - name: Network-Inspection-A
         availabilityZone: a
@@ -1572,6 +1612,10 @@ vpcs:
         availabilityZone: b
         routeTable: Network-Inspection-Tgw-B
         ipv4CidrBlock: 10.2.3.224/28
+      - name: Network-Inspection-Local-A
+        localZone: atl-2a
+        routeTable: Network-Inspection-Local-Rt-A
+        ipv4CidrBlock: 10.3.0.0/24
     securityGroups:
       - name: Data
         description: Firewall data

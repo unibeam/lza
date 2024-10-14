@@ -50,7 +50,7 @@ import {
   createSecurityResourcesStack,
   createSecurityStack,
   createTesterStack,
-  importAseaResourceStacks,
+  importAseaResourceStack,
   saveAseaResourceMapping,
 } from '../utils/stack-utils';
 import { AseaResourceMapping } from '@aws-accelerator/config';
@@ -64,7 +64,7 @@ const logger = createLogger(['app']);
  * @param acceleratorEnv
  * @param resourcePrefixes
  */
-function createPipelineStacks(
+async function createPipelineStacks(
   app: cdk.App,
   context: AcceleratorContext,
   acceleratorEnv: AcceleratorEnvironment,
@@ -73,7 +73,7 @@ function createPipelineStacks(
 ) {
   //
   // PIPELINE Stack
-  createPipelineStack(app, context, acceleratorEnv, resourcePrefixes, useExistingRoles);
+  await createPipelineStack(app, context, acceleratorEnv, resourcePrefixes, useExistingRoles);
   //
   // TESTER Stack
   createTesterStack(app, context, acceleratorEnv, resourcePrefixes);
@@ -142,7 +142,11 @@ function createSingleAccountMultiRegionStacks(
  * @param context
  * @param props
  */
-function createMultiAccountMultiRegionStacks(app: cdk.App, context: AcceleratorContext, props: AcceleratorStackProps) {
+async function createMultiAccountMultiRegionStacks(
+  app: cdk.App,
+  context: AcceleratorContext,
+  props: AcceleratorStackProps,
+) {
   const aseaResources: AseaResourceMapping[] = [];
   for (const enabledRegion of props.globalConfig.enabledRegions) {
     let accountId = '';
@@ -159,7 +163,7 @@ function createMultiAccountMultiRegionStacks(app: cdk.App, context: AcceleratorC
       };
       //
       // Import ASEA resources using CfnInclude
-      const aseaAccountResources = importAseaResourceStacks(app, context, props, accountId, enabledRegion);
+      const aseaAccountResources = await importAseaResourceStack(app, context, props, accountId, enabledRegion);
       if (aseaAccountResources) aseaResources.push(...aseaAccountResources);
       //
       // KEY and DEPENDENCIES Stacks
@@ -195,7 +199,7 @@ function createMultiAccountMultiRegionStacks(app: cdk.App, context: AcceleratorC
   }
 
   if (props.globalConfig.externalLandingZoneResources?.importExternalLandingZoneResources) {
-    saveAseaResourceMapping(context, props, aseaResources);
+    await saveAseaResourceMapping(context, props, aseaResources);
   }
 }
 
@@ -226,7 +230,7 @@ async function main() {
 
   //
   // PIPELINE and TESTER Stacks
-  createPipelineStacks(app, context, acceleratorEnv, resourcePrefixes, useExistingRoles);
+  await createPipelineStacks(app, context, acceleratorEnv, resourcePrefixes, useExistingRoles);
   //
   // Set accelerator stack props
   const props = await setAcceleratorStackProps(context, acceleratorEnv, resourcePrefixes, globalRegion);

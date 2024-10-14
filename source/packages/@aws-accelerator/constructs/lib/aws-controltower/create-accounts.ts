@@ -55,7 +55,7 @@ export class CreateControlTowerAccounts extends Construct {
       description: 'Create Control Tower Account onEvent handler',
       environmentEncryption: props.kmsKey,
     });
-    new cdk.aws_logs.LogGroup(this, `${this.onEvent.node.id}LogGroup`, {
+    const onEventLogGroup = new cdk.aws_logs.LogGroup(this, `${this.onEvent.node.id}LogGroup`, {
       logGroupName: `/aws/lambda/${this.onEvent.functionName}`,
       retention: props.logRetentionInDays,
       encryptionKey: props.kmsKey,
@@ -134,7 +134,7 @@ export class CreateControlTowerAccounts extends Construct {
       initialPolicy: [ddbPolicy, ddbKmsPolicy, ctPolicy, ssoPolicy],
       environmentEncryption: props.kmsKey,
     });
-    new cdk.aws_logs.LogGroup(this, `${this.isComplete.node.id}LogGroup`, {
+    const isCompleteLogGroup = new cdk.aws_logs.LogGroup(this, `${this.isComplete.node.id}LogGroup`, {
       logGroupName: `/aws/lambda/${this.isComplete.functionName}`,
       retention: props.logRetentionInDays,
       encryptionKey: props.kmsKey,
@@ -151,12 +151,23 @@ export class CreateControlTowerAccounts extends Construct {
       principalArn: this.isComplete.role?.roleArn ?? '',
       principalType: 'IAM',
     });
+    const waiterStateMachineLogGroup = new cdk.aws_logs.LogGroup(this, `${this.onEvent.node.id}WaiterLogGroup`, {
+      logGroupName: `/aws/vendedlogs/states/waiter-state-machine/${this.onEvent.node.id}`,
+      retention: props.logRetentionInDays,
+      encryptionKey: props.kmsKey,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
 
     this.provider = new cdk.custom_resources.Provider(this, 'CreateControlTowerAcccountsProvider', {
       onEventHandler: this.onEvent,
       isCompleteHandler: this.isComplete,
       queryInterval: cdk.Duration.seconds(30),
       totalTimeout: cdk.Duration.hours(4),
+      waiterStateMachineLogOptions: {
+        destination: waiterStateMachineLogGroup,
+        includeExecutionData: true,
+        level: cdk.aws_stepfunctions.LogLevel.ERROR, // error is the default level that CDK auto-creates
+      },
     });
 
     //
@@ -172,6 +183,10 @@ export class CreateControlTowerAccounts extends Construct {
       },
     });
 
+    // Ensure that the LogGroup is created by Cloudformation prior to Lambda execution
+    resource.node.addDependency(isCompleteLogGroup);
+    resource.node.addDependency(onEventLogGroup);
+    resource.node.addDependency(waiterStateMachineLogGroup);
     this.id = resource.ref;
   }
 }

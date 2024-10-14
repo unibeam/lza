@@ -399,6 +399,9 @@ exports[`IdentityCenterStack Construct(IdentityCenterStack):  Snapshot Test 1`] 
     },
     "IdentityCenterInstanceIdentityCenterGetInstanceIdIdentityCenterGetInstanceIdResourceE2BD9B5B": {
       "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "IdentityCenterInstanceIdentityCenterGetInstanceIdFunctionResourceLogGroup043D5A24",
+      ],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": [
@@ -439,7 +442,7 @@ exports[`IdentityCenterStack Construct(IdentityCenterStack):  Snapshot Test 1`] 
             "Arn",
           ],
         },
-        "Runtime": "nodejs18.x",
+        "Runtime": "nodejs20.x",
         "Timeout": 900,
       },
       "Type": "AWS::Lambda::Function",
@@ -692,7 +695,7 @@ exports[`IdentityCenterStack Construct(IdentityCenterStack):  Snapshot Test 1`] 
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-IdentityCenterStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.7.1",
+        "Value": "1.9.2",
       },
       "Type": "AWS::SSM::Parameter",
     },

@@ -11,7 +11,7 @@
  *  and limitations under the License.
  */
 
-import { AseaResourceMapping, GlobalConfig } from '@aws-accelerator/config';
+import { ASEAMapping, AseaResourceMapping, GlobalConfig } from '@aws-accelerator/config';
 import { createLogger } from '@aws-accelerator/utils/lib/logger';
 import * as cdk from 'aws-cdk-lib';
 import { AwsSolutionsChecks, NagSuppressions } from 'cdk-nag';
@@ -50,6 +50,10 @@ import { AcceleratorAspects, PermissionsBoundaryAspect } from '../lib/accelerato
 import { ResourcePolicyEnforcementStack } from '../lib/stacks/resource-policy-enforcement-stack';
 import { DiagnosticsPackStack } from '../lib/stacks/diagnostics-pack-stack';
 import { AcceleratorToolkit } from '../lib/toolkit';
+import { AssumeRoleCommand, GetCallerIdentityCommand, STSClient } from '@aws-sdk/client-sts';
+import { setRetryStrategy } from '@aws-accelerator/utils/lib/common-functions';
+import { throttlingBackOff } from '@aws-accelerator/utils/lib/throttle';
+import { ControlTowerClient, ListLandingZonesCommand } from '@aws-sdk/client-controltower';
 
 const logger = createLogger(['stack-utils']);
 /**
@@ -233,7 +237,7 @@ export function includeStage(
  * @param acceleratorEnv
  * @param resourcePrefixes
  */
-export function createPipelineStack(
+export async function createPipelineStack(
   app: cdk.App,
   context: AcceleratorContext,
   acceleratorEnv: AcceleratorEnvironment,
@@ -246,6 +250,26 @@ export function createPipelineStack(
       accountId: context.account!,
       region: context.region!,
     });
+    // get existing CT details only when Control Tower is enabled
+    let landingZoneIdentifier: string | undefined;
+    if (acceleratorEnv.controlTowerEnabled === 'Yes' && !acceleratorEnv.enableSingleAccountMode) {
+      //
+      // Get Management account credentials
+      //
+      const solutionId = `AwsSolution/SO0199/${version}`;
+      const managementAccountCredentials = await getManagementAccountCredentials(
+        context.partition,
+        context.region!,
+        solutionId,
+      );
+
+      landingZoneIdentifier = await getLandingZoneIdentifier(undefined, {
+        homeRegion: context.region!,
+        solutionId,
+        credentials: managementAccountCredentials,
+      });
+    }
+
     const pipelineStack = new PipelineStack(app, pipelineStackName, {
       env: { account: context.account, region: context.region },
       description: `(SO0199-pipeline) Landing Zone Accelerator on AWS. Version ${version}.`,
@@ -254,6 +278,7 @@ export function createPipelineStack(
       prefixes: resourcePrefixes,
       useExistingRoles,
       ...acceleratorEnv,
+      landingZoneIdentifier,
     });
     cdk.Aspects.of(pipelineStack).add(new AwsSolutionsChecks());
     cdk.Aspects.of(pipelineStack).add(new PermissionsBoundaryAspect(context.account!, context.partition));
@@ -1174,7 +1199,7 @@ export function createCustomizationsStacks(
  * @param enabledRegion
  * @returns
  */
-export function importAseaResourceStacks(
+export async function importAseaResourceStack(
   rootApp: cdk.App,
   rootContext: AcceleratorContext,
   props: AcceleratorStackProps,
@@ -1211,23 +1236,25 @@ export function importAseaResourceStacks(
     logger.error(`Could not load accelerator prefix from externalLandingZoneResources in global config`);
     throw new Error(`Configuration validation failed at runtime.`);
   }
-  /**
-   * Create one cdk.App for each account and region to avoid name conflicts
-   * Couldn't use cdk.Stage because of NestedStack naming
-   * CfnInclude.loadNestedStack prefixes stage name to existing stack name.
-   */
-  const app = new cdk.App({
-    outdir: `cdk.out/phase-${accountId}-${enabledRegion}`,
-  });
 
   const resourceMapping: AseaResourceMapping[] = [];
-
-  for (const phase of [-1, 0, 1, 2, 3, 4, 5]) {
-    const aseaStacks = aseaStackMap.filter(
-      stack => stack.accountId === accountId && stack.region === enabledRegion && stack.phase === phase,
-    );
-    if (aseaStacks.length === 0) {
-      logger.warn(`No ASEA stack found for account ${accountId} in region ${enabledRegion} for ${phase.toString()}`);
+  for (const phase of ['-1', '0', '1', '2', '3', '4', '5']) {
+    const app = new cdk.App({
+      outdir: `cdk.out/phase${phase}-${accountId}-${enabledRegion}`,
+    });
+    const importStackPromises = [];
+    const stacksByPhase: ASEAMapping[] = [];
+    Object.keys(aseaStackMap).forEach(key => {
+      if (
+        aseaStackMap[key].accountId === accountId &&
+        aseaStackMap[key].region === enabledRegion &&
+        aseaStackMap[key].phase === phase
+      ) {
+        stacksByPhase.push(aseaStackMap[key]);
+      }
+    });
+    if (stacksByPhase.length === 0) {
+      logger.warn(`No ASEA stack found for account ${accountId} in region ${enabledRegion} for ${phase}`);
       continue;
     }
     const synthesizer = getAseaStackSynthesizer({
@@ -1236,27 +1263,33 @@ export function importAseaResourceStacks(
       region: enabledRegion,
       roleName: props.globalConfig.cdkOptions.customDeploymentRole || `${acceleratorPrefix}-PipelineRole`,
     });
-
-    for (const aseaStack of aseaStacks.filter(stack => !stack.nestedStack)) {
-      const { resourceMapping: stackResourceMapping } = new ImportAseaResourcesStack(app, aseaStack.stackName, {
-        ...props,
-        stackName: aseaStack.stackName,
-        synthesizer,
-        terminationProtection: props.globalConfig.terminationProtection ?? true,
-        stackInfo: aseaStack,
-        nestedStacks: aseaStacks.filter(
-          stack => stack.nestedStack && stack.accountId === aseaStack.accountId && stack.region === aseaStack.region,
-        ),
-        env: {
-          account: accountId,
-          region: enabledRegion,
-        },
-        stage: rootContext.stage! as
-          | AcceleratorStage.IMPORT_ASEA_RESOURCES
-          | AcceleratorStage.POST_IMPORT_ASEA_RESOURCES,
-      });
-      resourceMapping.push(...stackResourceMapping);
+    for (const aseaStack of stacksByPhase) {
+      importStackPromises.push(
+        ImportAseaResourcesStack.init(app, aseaStack.stackName, {
+          ...props,
+          stackName: aseaStack.stackName,
+          synthesizer,
+          terminationProtection: props.globalConfig.terminationProtection ?? true,
+          stackInfo: aseaStack,
+          mapping: aseaStackMap,
+          env: {
+            account: accountId,
+            region: enabledRegion,
+          },
+          stage: rootContext.stage! as
+            | AcceleratorStage.IMPORT_ASEA_RESOURCES
+            | AcceleratorStage.POST_IMPORT_ASEA_RESOURCES,
+        }),
+      );
     }
+    const resourceMappings = await Promise.all(importStackPromises);
+    const saveResourceMappingPromises = [];
+    for (const mapping of resourceMappings) {
+      saveResourceMappingPromises.push(mapping.saveLocalResourceFile());
+      resourceMapping.push(...mapping.resourceMapping);
+    }
+    await Promise.all(saveResourceMappingPromises);
+    saveResourceMappingPromises.length = 0;
   }
   return resourceMapping;
 }
@@ -1267,13 +1300,17 @@ export function importAseaResourceStacks(
  * @param props
  * @param resources
  */
-export function saveAseaResourceMapping(
+export async function saveAseaResourceMapping(
   context: AcceleratorContext,
   props: AcceleratorStackProps,
   resources: AseaResourceMapping[],
 ) {
-  if (context.stage && context.stage === AcceleratorStage.IMPORT_ASEA_RESOURCES) {
-    props.globalConfig.saveAseaResourceMapping(resources);
+  if (
+    context.stage &&
+    (context.stage === AcceleratorStage.IMPORT_ASEA_RESOURCES ||
+      context.stage === AcceleratorStage.POST_IMPORT_ASEA_RESOURCES)
+  ) {
+    await props.globalConfig.saveAseaResourceMapping(resources);
   }
 }
 
@@ -1388,4 +1425,180 @@ function checkRootApp(rootApp: cdk.App): cdk.App | cdk.Stack {
   } else {
     return rootApp;
   }
+}
+
+/**
+ * Cross Account assume role credential type
+ */
+type AssumeRoleCredentialType = {
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken: string;
+  expiration?: Date;
+};
+
+/**
+ * Function to get management account credential.
+ *
+ * @remarks
+ * When solution deployed from external account management account credential will be provided
+ * @param partition string
+ * @param region string
+ * @param solutionId string
+ * @returns credential {@AssumeRoleCredentialType} | undefined
+ */
+async function getManagementAccountCredentials(
+  partition: string,
+  region: string,
+  solutionId: string,
+): Promise<AssumeRoleCredentialType | undefined> {
+  if (process.env['MANAGEMENT_ACCOUNT_ID'] && process.env['MANAGEMENT_ACCOUNT_ROLE_NAME']) {
+    logger.info('set management account credentials');
+    logger.info(`managementAccountId => ${process.env['MANAGEMENT_ACCOUNT_ID']}`);
+    logger.info(`management account role name => ${process.env['MANAGEMENT_ACCOUNT_ROLE_NAME']}`);
+
+    const assumeRoleArn = `arn:${partition}:iam::${process.env['MANAGEMENT_ACCOUNT_ID']}:role/${process.env['MANAGEMENT_ACCOUNT_ROLE_NAME']}`;
+
+    return getCredentials({
+      accountId: process.env['MANAGEMENT_ACCOUNT_ID'],
+      region,
+      solutionId,
+      assumeRoleArn,
+      sessionName: 'ManagementAccountAssumeSession',
+    });
+  }
+
+  return undefined;
+}
+
+/**
+ * Function to get cross account assume role credential
+ * @param options
+ * @returns credentials {@link Credentials}
+ */
+async function getCredentials(options: {
+  accountId: string;
+  region: string;
+  solutionId: string;
+  partition?: string;
+  assumeRoleName?: string;
+  assumeRoleArn?: string;
+  sessionName?: string;
+  credentials?: AssumeRoleCredentialType;
+}): Promise<AssumeRoleCredentialType | undefined> {
+  if (options.assumeRoleName && options.assumeRoleArn) {
+    throw new Error(`Either assumeRoleName or assumeRoleArn can be provided not both`);
+  }
+
+  if (!options.assumeRoleName && !options.assumeRoleArn) {
+    throw new Error(`Either assumeRoleName or assumeRoleArn must provided`);
+  }
+
+  if (options.assumeRoleName && !options.partition) {
+    throw new Error(`When assumeRoleName provided partition must be provided`);
+  }
+
+  const roleArn =
+    options.assumeRoleArn ?? `arn:${options.partition}:iam::${options.accountId}:role/${options.assumeRoleName}`;
+
+  const client: STSClient = new STSClient({
+    region: options.region,
+    customUserAgent: options.solutionId,
+    retryStrategy: setRetryStrategy(),
+    credentials: options.credentials,
+  });
+
+  const currentSessionResponse = await throttlingBackOff(() => client.send(new GetCallerIdentityCommand({})));
+
+  if (currentSessionResponse.Arn === roleArn) {
+    logger.info(`Already in target environment assume role credential not required`);
+    return undefined;
+  }
+
+  const response = await throttlingBackOff(() =>
+    client.send(
+      new AssumeRoleCommand({ RoleArn: roleArn, RoleSessionName: options.sessionName ?? 'AcceleratorAssumeRole' }),
+    ),
+  );
+
+  if (!response.Credentials) {
+    throw new Error(`Credentials undefined from AssumeRole command`);
+  }
+
+  //
+  // Validate response
+  if (!response.Credentials.AccessKeyId) {
+    throw new Error(`Access key ID not returned from AssumeRole command`);
+  }
+  if (!response.Credentials.SecretAccessKey) {
+    throw new Error(`Secret access key not returned from AssumeRole command`);
+  }
+  if (!response.Credentials.SessionToken) {
+    throw new Error(`Session token not returned from AssumeRole command`);
+  }
+
+  return {
+    accessKeyId: response.Credentials.AccessKeyId,
+    secretAccessKey: response.Credentials.SecretAccessKey,
+    sessionToken: response.Credentials.SessionToken,
+    expiration: response.Credentials.Expiration,
+  };
+}
+
+/**
+ * Function to get the landing zone identifier.
+ *
+ * @remarks
+ * Function returns undefined when there is no landing zone configured, otherwise returns arn for the landing zone.
+ * If there are multiple landing zone deployment found, function will return error.
+ * @returns landingZoneIdentifier string | undefined
+ *
+ * @param client {@link ControlTowerClient}
+ * @returns landingZoneIdentifier string | undefined
+ */
+async function getLandingZoneIdentifier(
+  client?: ControlTowerClient,
+  clientProps?: {
+    homeRegion: string;
+    solutionId: string;
+    credentials?: AssumeRoleCredentialType;
+  },
+): Promise<string | undefined> {
+  if (!client && !clientProps) {
+    throw new Error(`It is necessary to provide either AWS Control Tower client or client configuration properties.`);
+  }
+  if (client && clientProps) {
+    throw new Error(
+      `It is not possible to provide both AWS Control Tower client and client configuration properties at the same time.`,
+    );
+  }
+
+  let controlTowerClient: ControlTowerClient;
+
+  if (!client) {
+    controlTowerClient = new ControlTowerClient({
+      region: clientProps!.homeRegion,
+      customUserAgent: clientProps!.solutionId,
+      retryStrategy: setRetryStrategy(),
+      credentials: clientProps!.credentials,
+    });
+  } else {
+    controlTowerClient = client;
+  }
+
+  const response = await throttlingBackOff(() => controlTowerClient.send(new ListLandingZonesCommand({})));
+
+  if (response.landingZones!.length > 1) {
+    throw new Error(
+      `Multiple AWS Control Tower Landing Zone configuration found, list of Landing Zone arns are - ${response.landingZones?.join(
+        ',',
+      )}`,
+    );
+  }
+
+  if (response.landingZones?.length === 1 && response.landingZones[0].arn) {
+    return response.landingZones[0].arn;
+  }
+
+  return undefined;
 }

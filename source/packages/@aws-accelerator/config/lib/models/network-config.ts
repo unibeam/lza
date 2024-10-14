@@ -510,6 +510,29 @@ export interface ITransitGatewayPeeringConfig {
  *     routeTables: []
  *     tags: []
  * ```
+ *
+ * The following example creates a TGW with a static IPv4 and IPv6 address
+ * @example
+ * ```
+ * transitGateways:
+ *   - name: Network-Main
+ *     account: Network
+ *     region: us-east-1
+ *     transitGatewayCidrBlocks:
+ *       - 10.5.0.0/24
+ *     transitGatewayIpv6CidrBlocks:
+ *       - 2001:db8::/64
+ *     shareTargets:
+ *       organizationalUnits: []
+ *     asn: 65000
+ *     dnsSupport: enable
+ *     vpnEcmpSupport: enable
+ *     defaultRouteTableAssociation: disable
+ *     defaultRouteTablePropagation: disable
+ *     autoAcceptSharingAttachments: enable
+ *     routeTables: []
+ *     tags: []
+ * ```
  */
 export interface ITransitGatewayConfig {
   /**
@@ -540,6 +563,16 @@ export interface ITransitGatewayConfig {
    * @see {@link ShareTargets}
    */
   readonly shareTargets?: t.IShareTargets;
+  /**
+   * (OPTIONAL) A list of transit gateway IPv4 CIDR blocks.
+   */
+  readonly transitGatewayCidrBlocks?: t.NonEmptyString[];
+
+  /**
+   * (OPTIONAL) A list of transit gateway IPv6 CIDR blocks.
+   */
+  readonly transitGatewayIpv6CidrBlocks?: t.NonEmptyString[];
+
   /**
    * A Border Gateway Protocol (BGP) Autonomous System Number (ASN).
    *
@@ -1563,6 +1596,22 @@ export interface ISubnetConfig {
    */
   readonly assignIpv6OnCreation?: boolean;
   /**
+   * The Zone ID of the local zone.
+   *
+   * @remarks
+   * **CAUTION**: changing this property after initial deployment will cause a subnet recreation.
+   * Please be aware that any downstream dependencies may cause this property update to fail.
+   *
+   * This will be the identifier of the local zone (ie - 'den-1a' for 'us-west-2-den-1a')
+   *
+   * @remarks
+   * In order to use local zones, your account and region will have to opt-in. Steps to do so can be done through the {@link https://docs.aws.amazon.com/local-zones/latest/ug/getting-started.html | Getting Started documentation}.
+   *
+   * There are multiple use cases where local zones is not supported, see {@link https://docs.aws.amazon.com/local-zones/latest/ug/how-local-zones-work.html | use cases}.
+   * For more general information, see {@link https://docs.aws.amazon.com/local-zones/latest/ug/available-local-zones.html | Available Local Zones} in the AWS Local Zones User Guide.
+   */
+  readonly localZone?: t.NonEmptyString;
+  /**
    * The Availability Zone (AZ) the subnet resides in.
    *
    * @remarks
@@ -1895,6 +1944,114 @@ export interface ITransitGatewayAttachmentConfig {
   readonly tags?: t.ITag[];
 }
 
+/**
+ * *{@link NetworkConfig} / {@link TransitGatewayConnectConfig}*
+ *
+ * {@link https://docs.aws.amazon.com/vpc/latest/tgw/tgw-connect.html | Transit Gateway Connect VPC attachment} configuration.
+ *
+ * @description
+ * Use this configuration to define a Transit Gateway Connect attachment to your VPC.
+ * A Transit Gateway Connect attachment will establish a connection between a transit gateway and third-party virtual appliances (such as SD-WAN appliances)
+ * running in a VPC. A Connect attachment supports the Generic Routing Encapsulation (GRE) tunnel protocol for high performance,
+ * and Border Gateway Protocol (BGP) for dynamic routing.
+ *
+ * @example
+ * ```
+ * - name: Network-Vpc-Tgw-Connect
+ *   region: us-east-1
+ *   transitGateway:
+ *     name: Network-Main
+ *     account: Network
+ *   vpc:
+ *     vpcName: Network
+ *     vpcAttachment: Network-Proxy
+ *   options:
+ *     protocol: gre
+ * ```
+ *
+ * * @description
+ * Use this configuration to define a Transit Gateway Connect attachment to your Direct Connect Gateway.
+ *
+ * @example
+ * ```
+ * - name: Network-Dx-Tgw-Connect
+ *   region: us-east-1
+ *   transitGateway:
+ *     name: Network-Main
+ *     account: Network
+ *   directConnect: Dx-Onprem-IAD
+ *   options:
+ *     protocol: gre
+ * ```
+ */
+export interface ITransitGatewayConnectConfig {
+  /**
+   * A friendly name for the Transit Gateway Connect attachment.
+   *
+   * @remarks
+   * **CAUTION**: Changing this value after initial deployment will cause the attachment to be recreated.
+   * Please be aware that any downstream dependencies may cause this property update to fail.
+   */
+  readonly name: t.NonEmptyString;
+  /**
+   * The AWS Region for the attachment.
+   *
+   * @remarks
+   * This must be set in the same region as the Transit Gateway.
+   */
+  readonly region: t.NonEmptyString;
+  /**
+   * The Transit Gateway configuration object to set the Transit Gateway Connect.
+   *
+   * @see {@link TransitGatewayAttachmentTargetConfig}
+   */
+  readonly transitGateway: ITransitGatewayAttachmentTargetConfig;
+  /**
+   * The VPC Attachment that belongs to the Transit Gateway that a Transit Gateway Connect Attachment is being made for.
+   * @see {@link TransitGatewayConnectVpcConfig}
+   *
+   * @remarks
+   * Either `vpc` or `directConnect` must be provided, not both.
+   */
+  readonly vpc?: ITransitGatewayConnectVpcConfig;
+  /**
+   * (OPTIONAL) The Direct Connect Gateway Attachment that belongs to the Transit Gateway that a Transit Gateway Connect Attachment is being made for.
+   * @see {@link TransitGatewayConnectDirectConnectConfig}
+   *
+   * @remarks
+   * Either `vpc` or `directConnect` must be provided, not both.
+   */
+  readonly directConnect?: t.NonEmptyString;
+  /**
+   * (OPTIONAL) Options around the Transit Gateway Connect
+   * @see {@link TransitGatewayConnectOptionsConfig}
+   */
+  readonly options?: ITransitGatewayConnectOptionsConfig;
+  /**
+   * (OPTIONAL) An array of tag objects for the Transit Gateway attachment.
+   */
+  readonly tags?: t.ITag[];
+}
+
+export interface ITransitGatewayConnectVpcConfig {
+  /**
+   * The name of the VPC
+   */
+  readonly vpcName: t.NonEmptyString;
+  /**
+   * The name of the VPC attachment
+   */
+  readonly vpcAttachment: t.NonEmptyString;
+}
+
+export interface ITransitGatewayConnectOptionsConfig {
+  /**
+   * The tunnel protocl for the Transit Gateway Connect
+   */
+  readonly protocol: TransitGatewayConnectProtocol;
+}
+
+export type TransitGatewayConnectProtocol = 'gre';
 export type IpAddressFamilyType = 'IPv4' | 'IPv6';
 
 /**
@@ -1941,6 +2098,7 @@ export type IpAddressFamilyType = 'IPv4' | 'IPv6';
  *     tags: []
  * ```
  */
+
 export interface IPrefixListConfig {
   /**
    * A friendly name for the prefix list.
@@ -7067,6 +7225,13 @@ export interface INetworkConfig {
    * @see {@link TransitGatewayConfig}
    */
   readonly transitGateways: ITransitGatewayConfig[];
+  /**
+   * An array of Transit Gateway Connect configurations.
+   *
+   * @see {@link TransitGatewayConnectConfig}
+   */
+  readonly transitGatewayConnects?: ITransitGatewayConnectConfig[];
+
   /**
    * Transit Gateway peering configuration.
    *

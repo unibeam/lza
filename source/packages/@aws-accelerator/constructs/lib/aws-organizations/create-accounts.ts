@@ -53,13 +53,12 @@ export class CreateOrganizationAccounts extends Construct {
       description: 'Create Organization Accounts OnEvent handler',
       environmentEncryption: props.kmsKey,
     });
-    new cdk.aws_logs.LogGroup(this, `${this.onEvent.node.id}LogGroup`, {
+    const onEventLogGroup = new cdk.aws_logs.LogGroup(this, `${this.onEvent.node.id}LogGroup`, {
       logGroupName: `/aws/lambda/${this.onEvent.functionName}`,
       retention: props.logRetentionInDays,
       encryptionKey: props.kmsKey,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
-
     const ddbPolicy = new cdk.aws_iam.PolicyStatement({
       sid: 'DynamoDb',
       effect: cdk.aws_iam.Effect.ALLOW,
@@ -99,7 +98,7 @@ export class CreateOrganizationAccounts extends Construct {
       initialPolicy: [ddbPolicy, ddbKmsPolicy, orgPolicy],
       environmentEncryption: props.kmsKey,
     });
-    new cdk.aws_logs.LogGroup(this, `${this.isComplete.node.id}LogGroup`, {
+    const isCompleteLogGroup = new cdk.aws_logs.LogGroup(this, `${this.isComplete.node.id}LogGroup`, {
       logGroupName: `/aws/lambda/${this.isComplete.functionName}`,
       retention: props.logRetentionInDays,
       encryptionKey: props.kmsKey,
@@ -123,11 +122,22 @@ export class CreateOrganizationAccounts extends Construct {
       this.isComplete.addToRolePolicy(mappingTableKeyPolicy);
     }
 
+    const waiterStateMachineLogGroup = new cdk.aws_logs.LogGroup(this, `${this.onEvent.node.id}WaiterLogGroup`, {
+      logGroupName: `/aws/vendedlogs/states/waiter-state-machine/${this.onEvent.node.id}`,
+      retention: props.logRetentionInDays,
+      encryptionKey: props.kmsKey,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
     this.provider = new cdk.custom_resources.Provider(this, 'CreateOrganizationAccountsProvider', {
       onEventHandler: this.onEvent,
       isCompleteHandler: this.isComplete,
       queryInterval: cdk.Duration.seconds(15),
       totalTimeout: cdk.Duration.hours(2),
+      waiterStateMachineLogOptions: {
+        destination: waiterStateMachineLogGroup,
+        includeExecutionData: true,
+        level: cdk.aws_stepfunctions.LogLevel.ERROR, // error is the default level that CDK auto-creates
+      },
     });
 
     const resource = new cdk.CustomResource(this, 'Resource', {
@@ -138,6 +148,10 @@ export class CreateOrganizationAccounts extends Construct {
       },
     });
 
+    // Ensure that the LogGroup is created by Cloudformation prior to Lambda execution
+    resource.node.addDependency(isCompleteLogGroup);
+    resource.node.addDependency(onEventLogGroup);
+    resource.node.addDependency(waiterStateMachineLogGroup);
     this.id = resource.ref;
   }
 }

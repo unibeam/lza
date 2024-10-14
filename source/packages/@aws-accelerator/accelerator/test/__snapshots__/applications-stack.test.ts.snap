@@ -125,7 +125,7 @@ exports[`ApplicationsStack Construct(ApplicationsStack):  Snapshot Test 1`] = `
             "Arn",
           ],
         },
-        "Runtime": "nodejs18.x",
+        "Runtime": "nodejs20.x",
         "Timeout": 900,
       },
       "Type": "AWS::Lambda::Function",
@@ -440,7 +440,7 @@ exports[`ApplicationsStack Construct(ApplicationsStack):  Snapshot Test 1`] = `
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-CustomizationsStack-444444444444-us-east-1/version",
         "Type": "String",
-        "Value": "1.7.1",
+        "Value": "1.9.2",
       },
       "Type": "AWS::SSM::Parameter",
     },
