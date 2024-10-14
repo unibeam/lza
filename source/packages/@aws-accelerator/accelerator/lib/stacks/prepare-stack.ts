@@ -297,6 +297,22 @@ export class PrepareStack extends AcceleratorStack {
           cloudwatchKey,
         });
       }
+
+      // Resource Table for solution
+      const resourceTable = new cdk.aws_dynamodb.Table(this, 'AcceleratorResourceTable', {
+        partitionKey: { name: 'pk', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'sk', type: cdk.aws_dynamodb.AttributeType.STRING },
+        billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+        encryption: cdk.aws_dynamodb.TableEncryption.CUSTOMER_MANAGED,
+        encryptionKey: managementAccountKey,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        pointInTimeRecovery: true,
+      });
+
+      new cdk.aws_ssm.StringParameter(this, 'ResourceTableNameParameter', {
+        parameterName: this.acceleratorResourceNames.parameters.resourceTableName,
+        stringValue: resourceTable.tableName,
+      });
     }
     //
     // Create SSM Parameters
@@ -451,12 +467,20 @@ export class PrepareStack extends AcceleratorStack {
         'CreateOrganizationAccounts/CreateOrganizationAccountStatus/ServiceRole/DefaultPolicy/Resource',
         'CreateOrganizationAccounts/CreateOrganizationAccountsProvider/waiter-state-machine/Role/DefaultPolicy/Resource',
       ];
-
+      const orgAccountsSfSuppressionPaths = [
+        'CreateOrganizationAccounts/CreateOrganizationAccountsProvider/waiter-state-machine/Resource',
+      ];
       // AwsSolutions-IAM4: The IAM user, role, or group uses AWS managed policies
       this.createNagSuppressionsInputs(NagSuppressionRuleIds.IAM4, orgAccountsIam4SuppressionPaths);
 
       // AwsSolutions-IAM5: The IAM entity contains wildcard permissions and does not have a cdk_nag rule suppression with evidence for those permission
       this.createNagSuppressionsInputs(NagSuppressionRuleIds.IAM5, orgAccountsIam5SuppressionPaths);
+
+      // AwsSolutions-SF1: The Step Function does not log "ALL" events to CloudWatch Logs.
+      this.createNagSuppressionsInputs(NagSuppressionRuleIds.SF1, orgAccountsSfSuppressionPaths);
+
+      // AwsSolutions-SF2: The Step Function does not have X-Ray tracing enabled.
+      this.createNagSuppressionsInputs(NagSuppressionRuleIds.SF2, orgAccountsSfSuppressionPaths);
 
       if (options.props.globalConfig.controlTower.enable) {
         // Allow security/audit account access
@@ -502,12 +526,21 @@ export class PrepareStack extends AcceleratorStack {
           'CreateCTAccounts/CreateControlTowerAcccountsProvider/framework-onTimeout/ServiceRole/DefaultPolicy/Resource',
           'CreateCTAccounts/CreateControlTowerAcccountsProvider/waiter-state-machine/Role/DefaultPolicy/Resource',
         ];
+        const ctAccountsSfSuppressionPaths = [
+          'CreateCTAccounts/CreateControlTowerAcccountsProvider/waiter-state-machine/Resource',
+        ];
 
         // AwsSolutions-IAM4: The IAM user, role, or group uses AWS managed policies
         this.createNagSuppressionsInputs(NagSuppressionRuleIds.IAM4, ctAccountsIam4SuppressionPaths);
 
         // AwsSolutions-IAM5: The IAM entity contains wildcard permissions and does not have a cdk_nag rule suppression with evidence for those permission
         this.createNagSuppressionsInputs(NagSuppressionRuleIds.IAM5, ctAccountsIam5SuppressionPaths);
+
+        // AwsSolutions-SF1: The Step Function does not log "ALL" events to CloudWatch Logs.
+        this.createNagSuppressionsInputs(NagSuppressionRuleIds.SF1, ctAccountsSfSuppressionPaths);
+
+        // AwsSolutions-SF2: The Step Function does not have X-Ray tracing enabled.
+        this.createNagSuppressionsInputs(NagSuppressionRuleIds.SF2, ctAccountsSfSuppressionPaths);
 
         // resources for control tower lifecycle events
         const controlTowerOuEventsFunction = new cdk.aws_lambda.Function(this, 'ControlTowerOuEventsFunction', {

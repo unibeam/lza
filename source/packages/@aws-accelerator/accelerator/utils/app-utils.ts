@@ -132,6 +132,10 @@ export interface AcceleratorEnvironment {
    */
   auditAccountEmail: string;
   /**
+   * Location of the LZA configuration files
+   */
+  configRepositoryLocation: 'codecommit' | 's3';
+  /**
    * Accelerator configuration repository name
    */
   configRepositoryName: string;
@@ -349,6 +353,7 @@ export function setAcceleratorEnvironment(
     auditAccountEmail: env['AUDIT_ACCOUNT_EMAIL'] ?? '',
     configRepositoryName,
     configRepositoryBranchName: env['EXISTING_CONFIG_REPOSITORY_BRANCH_NAME'] ?? 'main',
+    configRepositoryLocation: env['CONFIG_REPOSITORY_LOCATION'] === 's3' ? 's3' : 'codecommit',
     controlTowerEnabled: env['CONTROL_TOWER_ENABLED'] ?? '',
     enableApprovalStage: env['ACCELERATOR_ENABLE_APPROVAL_STAGE']
       ? env['ACCELERATOR_ENABLE_APPROVAL_STAGE'] === 'Yes'
@@ -436,7 +441,7 @@ export async function setAcceleratorStackProps(
   await organizationConfig.loadOrganizationalUnitIds(context.partition);
 
   if (globalConfig.externalLandingZoneResources?.importExternalLandingZoneResources) {
-    await globalConfig.loadExternalMapping();
+    await globalConfig.loadExternalMapping(accountsConfig);
     await globalConfig.loadLzaResources(context.partition, prefixes.ssmParamName);
   }
   const centralizedLoggingRegion = globalConfig.logging.centralizedLoggingRegion ?? globalConfig.homeRegion;

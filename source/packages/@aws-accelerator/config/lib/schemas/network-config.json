@@ -7,10 +7,6 @@
         "HTTP",
         "HTTPS"
       ],
-      "enum": [
-        "HTTP",
-        "HTTPS"
-      ],
       "type": "string"
     },
     "AlbListenerTypeEnum": {

@@ -27,6 +27,7 @@ import { Validate } from './validate';
 export enum RepositorySources {
   GITHUB = 'github',
   CODECOMMIT = 'codecommit',
+  S3 = 's3',
 }
 
 export interface InstallerStackProps extends cdk.StackProps {
@@ -56,7 +57,7 @@ export interface InstallerStackProps extends cdk.StackProps {
 export class InstallerStack extends cdk.Stack {
   private readonly repositorySource = new cdk.CfnParameter(this, 'RepositorySource', {
     type: 'String',
-    description: 'Specify the git host',
+    description: 'Specify the location to use to host the LZA source code',
     allowedValues: [RepositorySources.GITHUB, RepositorySources.CODECOMMIT],
     default: RepositorySources.GITHUB,
   });
@@ -131,6 +132,12 @@ export class InstallerStack extends cdk.Stack {
     maxLength: 15,
   });
 
+  private readonly configurationRepositoryLocation = new cdk.CfnParameter(this, 'ConfigurationRepositoryLocation', {
+    type: 'String',
+    description: 'Specify the location to use to host the LZA configuration files',
+    allowedValues: [RepositorySources.CODECOMMIT, RepositorySources.S3],
+  });
+
   /**
    * Use existing configuration repository name flag
    * @private
@@ -175,7 +182,7 @@ export class InstallerStack extends cdk.Stack {
   private readonly enableDiagnosticsPack = new cdk.CfnParameter(this, 'EnableDiagnosticsPack', {
     type: 'String',
     allowedValues: ['Yes', 'No'],
-    default: 'No',
+    default: 'Yes',
     description:
       'Select Yes if deploying the solution with diagnostics pack enabled. Diagnostics pack enables you to generate root cause reports to potentially diagnose pipeline failures.',
   });
@@ -233,7 +240,7 @@ export class InstallerStack extends cdk.Stack {
 
     const parameterGroups: { Label: { default: string }; Parameters: string[] }[] = [
       {
-        Label: { default: 'Git Repository Configuration' },
+        Label: { default: 'Source Code Repository Configuration' },
         Parameters: [
           this.repositorySource.logicalId,
           this.repositoryOwner.logicalId,
@@ -258,10 +265,16 @@ export class InstallerStack extends cdk.Stack {
         Parameters: [
           this.controlTowerEnabled.logicalId,
           this.acceleratorPrefix.logicalId,
+          this.enableDiagnosticsPack.logicalId,
+        ],
+      },
+      {
+        Label: { default: 'Config Repository Configuration' },
+        Parameters: [
+          this.configurationRepositoryLocation.logicalId,
           this.useExistingConfigRepo.logicalId,
           this.existingConfigRepositoryName.logicalId,
           this.existingConfigRepositoryBranchName.logicalId,
-          this.enableDiagnosticsPack.logicalId,
         ],
       },
     ];
@@ -271,6 +284,7 @@ export class InstallerStack extends cdk.Stack {
       [this.repositoryOwner.logicalId]: { default: 'Repository Owner' },
       [this.repositoryName.logicalId]: { default: 'Repository Name' },
       [this.repositoryBranchName.logicalId]: { default: 'Branch Name' },
+      [this.configurationRepositoryLocation.logicalId]: { default: 'Configuration Repository Location' },
       [this.useExistingConfigRepo.logicalId]: { default: 'Use Existing Config Repository' },
       [this.existingConfigRepositoryName.logicalId]: { default: 'Existing Config Repository Name' },
       [this.existingConfigRepositoryBranchName.logicalId]: { default: 'Existing Config Repository Branch Name' },
@@ -357,18 +371,6 @@ export class InstallerStack extends cdk.Stack {
       };
     }
 
-    // Validate Installer Parameters
-
-    const validatorFunction = new Validate(this, 'ValidateInstaller', {
-      useExistingConfigRepo: this.useExistingConfigRepo.valueAsString,
-      existingConfigRepositoryName: this.existingConfigRepositoryName.valueAsString,
-      existingConfigRepositoryBranchName: this.existingConfigRepositoryBranchName.valueAsString,
-    });
-    // cfn-nag suppression
-    const validatorFunctionResource = validatorFunction.node.findChild('ValidationFunction').node
-      .defaultChild as cdk.CfnResource;
-    this.addLambdaNagMetadata(validatorFunctionResource);
-
     const resourceNamePrefixes = new ResourceNamePrefixes(this, 'ResourceNamePrefixes', {
       acceleratorPrefix: this.acceleratorPrefix.valueAsString,
       acceleratorQualifier: this.acceleratorQualifier?.valueAsString,
@@ -434,6 +436,20 @@ export class InstallerStack extends cdk.Stack {
         this.acceleratorQualifier!.valueAsString
       }-*`;
     }
+
+    // Validate Installer Parameters
+
+    const validatorFunction = new Validate(this, 'ValidateInstaller', {
+      useExistingConfigRepo: this.useExistingConfigRepo.valueAsString,
+      acceleratorPipelineName: acceleratorPipelineName,
+      configRepositoryLocation: this.configurationRepositoryLocation.valueAsString,
+      existingConfigRepositoryName: this.existingConfigRepositoryName.valueAsString,
+      existingConfigRepositoryBranchName: this.existingConfigRepositoryBranchName.valueAsString,
+    });
+    // cfn-nag suppression
+    const validatorFunctionResource = validatorFunction.node.findChild('ValidationFunction').node
+      .defaultChild as cdk.CfnResource;
+    this.addLambdaNagMetadata(validatorFunctionResource);
 
     if (props.enableSingleAccountMode) {
       targetAcceleratorEnvVariables['ACCELERATOR_ENABLE_SINGLE_ACCOUNT_MODE'] = {
@@ -728,11 +744,11 @@ export class InstallerStack extends cdk.Stack {
       environment: {
         buildImage: cdk.aws_codebuild.LinuxBuildImage.STANDARD_7_0,
         privileged: false,
-        computeType: cdk.aws_codebuild.ComputeType.MEDIUM,
+        computeType: cdk.aws_codebuild.ComputeType.LARGE,
         environmentVariables: {
           NODE_OPTIONS: {
             type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
-            value: '--max_old_space_size=4096',
+            value: '--max_old_space_size=12288',
           },
           CDK_NEW_BOOTSTRAP: {
             type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
@@ -753,6 +769,10 @@ export class InstallerStack extends cdk.Stack {
           ACCELERATOR_REPOSITORY_BRANCH_NAME: {
             type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
             value: this.repositoryBranchName.valueAsString,
+          },
+          CONFIG_REPOSITORY_LOCATION: {
+            type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
+            value: this.configurationRepositoryLocation.valueAsString,
           },
           USE_EXISTING_CONFIG_REPO: {
             type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,

@@ -131,6 +131,8 @@ export enum NagSuppressionRuleIds {
   S1 = 'S1',
   KDS3 = 'KDS3',
   AS3 = 'AS3',
+  SF1 = 'SF1',
+  SF2 = 'SF2',
 }
 
 /**
@@ -181,6 +183,7 @@ export interface AcceleratorStackProps extends cdk.StackProps {
   readonly replacementsConfig: ReplacementsConfig;
   readonly partition: string;
   readonly configRepositoryName: string;
+  readonly configRepositoryLocation: 's3' | 'codecommit';
   readonly qualifier?: string;
   readonly configCommitId?: string;
   readonly globalRegion: string;
