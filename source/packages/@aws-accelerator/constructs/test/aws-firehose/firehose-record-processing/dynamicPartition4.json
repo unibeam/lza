@@ -1,3 +1,0 @@
-[
-  { "logGroupPattern": "AWSAccelerator*VpcFlowLog*region", "s3Prefix": "accelerator-vpc-flow-logs-region" }
-]
