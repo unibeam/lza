@@ -68,16 +68,60 @@ controlTower:
     security:
       enableIdentityCenterAccess: true
   controls:
+    - identifier: AWS-GR_RDS_INSTANCE_PUBLIC_ACCESS_CHECK
+      enable: true
+      deploymentTargets:
+        organizationalUnits:
+          - SecureWorkloads
+          - Devops
+          - Infrastructure
+          - Security
+          - Level1
+    - identifier: AWS-GR_ELASTICSEARCH_IN_VPC_ONLY
+      enable: true
+      deploymentTargets:
+        organizationalUnits:
+          - SecureWorkloads
+          - Devops
+          - Infrastructure
+          - Security
+          - Level1
+    - identifier: AWS-GR_EC2_VOLUME_INUSE_CHECK
+      enable: true
+      deploymentTargets:
+        organizationalUnits:
+          - SecureWorkloads
+          - Devops
+          - Infrastructure
+          - Security
+          - Level1
+    - identifier: AWS-GR_EBS_SNAPSHOT_PUBLIC_RESTORABLE_CHECK
+      enable: true
+      deploymentTargets:
+        organizationalUnits:
+          - SecureWorkloads
+          - Devops
+          - Infrastructure
+          - Security
+          - Level1
     - identifier: AWS-GR_RESTRICT_ROOT_USER_ACCESS_KEYS
       enable: true
       deploymentTargets:
         organizationalUnits:
           - SecureWorkloads
+          - Devops
+          - Infrastructure
+          - Security
+          - Level1
     - identifier: AWS-GR_EBS_OPTIMIZED_INSTANCE
       enable: true
       deploymentTargets:
         organizationalUnits:
           - SecureWorkloads
+          - Devops
+          - Infrastructure
+          - Security
+          - Level1
     - identifier: AWS-GR_RESTRICTED_COMMON_PORTS
       enable: false
       deploymentTargets:
@@ -168,7 +212,7 @@ logging:
 
   assetBucket:
     importedBucket:
-      name: aws-accelerator-imported-all-enabled-${ACCOUNT_ID}-${REGION}
+      name: aws-accelerator-imported-all-enabled-${ASSET_BUCKET_ACCOUNT_ID}-${ASSET_BUCKET_REGION}
       applyAcceleratorManagedBucketPolicy: true
       createAcceleratorManagedKey: true
     # s3ResourcePolicyAttachments:
@@ -192,7 +236,7 @@ logging:
     lifecycleRules: []
   elbLogBucket:
     importedBucket:
-      name: existing-elb-logs-bucket-${ACCOUNT_ID}-${REGION}
+      name: existing-elb-logs-bucket-${ELB_LOG_BUCKET_ACCOUNT_ID}-${REGION}
       applyAcceleratorManagedBucketPolicy: true
     # customPolicyOverrides:
     #   policy: bucket-policies/full-elb-log-bucket.json
@@ -226,6 +270,8 @@ logging:
       managedDataIdentifiers:
         categories:
           - Credentials
+    firehose:
+      fileExtension: json.gz
     enable: true
     dynamicPartitioning: dynamic-partitioning/log-filters.json
     replaceLogDestinationArn: replaceLogDestinationArn

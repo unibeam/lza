@@ -1039,6 +1039,10 @@
           ],
           "type": "string"
         },
+        "publishPolicyFindings": {
+          "description": "Specifies whether to publish findings at all",
+          "type": "boolean"
+        },
         "publishSensitiveDataFindings": {
           "description": "Specifies whether to publish sensitive data findings to Security Hub. If you set this value to true, Amazon Macie automatically publishes all sensitive data findings that weren't suppressed by a findings filter. The default value is false.",
           "type": "boolean"
@@ -1629,6 +1633,7 @@
         "ap-southeast-2",
         "ap-southeast-3",
         "ap-southeast-4",
+        "ap-southeast-5",
         "ca-central-1",
         "ca-west-1",
         "cn-north-1",
@@ -1641,6 +1646,7 @@
         "eu-west-1",
         "eu-west-2",
         "eu-west-3",
+        "eu-isoe-west-1",
         "il-central-1",
         "me-central-1",
         "me-south-1",
@@ -1652,6 +1658,8 @@
         "us-iso-east-1",
         "us-isob-east-1",
         "us-iso-west-1",
+        "us-isof-south-1",
+        "us-isof-east-1",
         "us-west-1",
         "us-west-2"
       ],

@@ -68,6 +68,7 @@ export class NetworkVpcStack extends NetworkStack {
       this.vpcResources,
       {
         acceleratorPrefix: props.prefixes.accelerator,
+        managementAccountAccessRole: props.globalConfig.managementAccountAccessRole,
         ssmParamName: props.prefixes.ssmParamName,
         partition: props.partition,
         useExistingRoles: props.useExistingRoles,
@@ -326,8 +327,12 @@ export class NetworkVpcStack extends NetworkStack {
       const vpcConfig = getVpcConfig(vpcResourcesToDeploy, firewallInstance.vpc);
       for (const routeTable of vpcConfig.routeTables ?? []) {
         for (const route of routeTable.routes ?? []) {
-          if (route.type === 'networkInterface' && route?.target?.includes(firewallInstance.name)) {
-            const firewallOwner = this.getVpcAccountIds(vpcConfig).join();
+          if (
+            route.type === 'networkInterface' &&
+            route?.target?.includes(firewallInstance.name) &&
+            firewallInstance.account
+          ) {
+            const firewallOwner = props.accountsConfig.getAccountId(firewallInstance.account);
             firewallAccountInfo.push({ accountId: firewallOwner, firewallVpc: vpcConfig });
           }
         }

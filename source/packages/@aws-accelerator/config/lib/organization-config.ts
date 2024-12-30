@@ -57,6 +57,13 @@ export abstract class TaggingPolicyConfig implements i.ITaggingPolicyConfig {
   readonly deploymentTargets: t.DeploymentTargets = new t.DeploymentTargets();
 }
 
+export abstract class ChatbotPolicyConfig implements i.IChatbotPolicyConfig {
+  readonly name: string = '';
+  readonly description: string = '';
+  readonly policy: string = '';
+  readonly deploymentTargets: t.DeploymentTargets = new t.DeploymentTargets();
+}
+
 export abstract class BackupPolicyConfig implements i.IBackupPolicyConfig {
   readonly name: string = '';
   readonly description: string = '';
@@ -88,6 +95,7 @@ export class OrganizationConfig implements i.IOrganizationConfig {
   readonly quarantineNewAccounts: QuarantineNewAccountsConfig | undefined = undefined;
   readonly serviceControlPolicies: ServiceControlPolicyConfig[] = [];
   readonly taggingPolicies: TaggingPolicyConfig[] = [];
+  readonly chatbotPolicies?: ChatbotPolicyConfig[] = [];
   readonly backupPolicies: BackupPolicyConfig[] = [];
 
   /**
@@ -158,9 +166,14 @@ export class OrganizationConfig implements i.IOrganizationConfig {
 
   /**
    * Load from string content
-   * @param partition
+   * @param partition string
+   * @param managementAccountCredentials {@link AWS.Credentials}
+   * @returns
    */
-  public async loadOrganizationalUnitIds(partition: string): Promise<void> {
+  public async loadOrganizationalUnitIds(
+    partition: string,
+    managementAccountCredentials?: AWS.Credentials,
+  ): Promise<void> {
     if (!this.enable) {
       // do nothing
       return;
@@ -168,7 +181,11 @@ export class OrganizationConfig implements i.IOrganizationConfig {
       this.organizationalUnitIds = [];
     }
     if (this.organizationalUnitIds?.length == 0) {
-      this.organizationalUnitIds = await loadOrganizationalUnits(partition, this.organizationalUnits);
+      this.organizationalUnitIds = await loadOrganizationalUnits(
+        partition,
+        this.organizationalUnits,
+        managementAccountCredentials,
+      );
     }
   }
 

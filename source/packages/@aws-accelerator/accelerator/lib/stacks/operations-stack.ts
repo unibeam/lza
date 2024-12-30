@@ -23,11 +23,11 @@ import {
   Region,
   RoleConfig,
   RoleSetConfig,
+  UserConfig,
   VaultConfig,
   VpcConfig,
   VpcTemplatesConfig,
 } from '@aws-accelerator/config';
-import { SsmResourceType } from '@aws-accelerator/utils/lib/ssm-parameter-path';
 import {
   Bucket,
   BucketEncryptionType,
@@ -38,6 +38,7 @@ import {
   SsmSessionManagerPolicy,
   WarmAccount,
 } from '@aws-accelerator/constructs';
+import { SsmResourceType } from '@aws-accelerator/utils/lib/ssm-parameter-path';
 import {
   AcceleratorKeyType,
   AcceleratorStack,
@@ -108,7 +109,7 @@ export class OperationsStack extends AcceleratorStack {
     //
     // Only deploy IAM and CUR resources into the home region
     //
-    if (props.globalConfig.homeRegion === cdk.Stack.of(this).region) {
+    if (this.isHomeRegion(props.globalConfig.homeRegion)) {
       this.addProviders();
       this.addManagedPolicies();
       this.addRoles();
@@ -122,7 +123,7 @@ export class OperationsStack extends AcceleratorStack {
       this.enableBudgetReports();
 
       // Create Accelerator Access Role in every region
-      this.createAssetAccessRole(assetBucketKmsKey);
+      this.createAssetAccessRole(props, assetBucketKmsKey);
 
       // Create Cross Account Service Catalog Role
       this.createServiceCatalogPropagationRole();
@@ -281,7 +282,7 @@ export class OperationsStack extends AcceleratorStack {
             kmsKey: this.cloudwatchKey,
             logRetentionInDays: this.props.globalConfig.cloudwatchLogRetentionInDays,
           });
-        } else if (this.props.globalConfig.homeRegion === cdk.Stack.of(this).region) {
+        } else if (this.isHomeRegion(this.props.globalConfig.homeRegion)) {
           this.logger.info(
             `Regions property not specified, creating service quota increase ${limit.quotaCode} in home region`,
           );
@@ -673,6 +674,33 @@ export class OperationsStack extends AcceleratorStack {
   }
 
   /**
+   * Create a secret password for a given user in secretsmanager.
+   */
+  private createSecretForUser(user: UserConfig, secretPrefix: string): cdk.aws_secretsmanager.Secret {
+    const secret = new cdk.aws_secretsmanager.Secret(this, pascalCase(`${user.username}Secret`), {
+      generateSecretString: {
+        secretStringTemplate: JSON.stringify({ username: user.username }),
+        generateStringKey: 'password',
+      },
+      secretName: `${secretPrefix}/${user.username}`,
+    });
+
+    // AwsSolutions-SMG4: The secret does not have automatic rotation scheduled.
+    // rule suppression with evidence for this permission.
+    this.nagSuppressionInputs.push({
+      id: NagSuppressionRuleIds.SMG4,
+      details: [
+        {
+          path: `${this.stackName}/${pascalCase(user.username)}Secret/Resource`,
+          reason: 'Accelerator users created as per iam-config file, MFA usage is enforced with boundary policy',
+        },
+      ],
+    });
+
+    return secret;
+  }
+
+  /**
    * Adds IAM Users
    */
   private addUsers() {
@@ -690,34 +718,21 @@ export class OperationsStack extends AcceleratorStack {
         }
         this.logger.info(`Add user ${user.username}`);
 
-        const secret = new cdk.aws_secretsmanager.Secret(this, pascalCase(`${user.username}Secret`), {
-          generateSecretString: {
-            secretStringTemplate: JSON.stringify({ username: user.username }),
-            generateStringKey: 'password',
-          },
-          secretName: `${this.props.prefixes.secretName}/${user.username}`,
-        });
-
-        // AwsSolutions-SMG4: The secret does not have automatic rotation scheduled.
-        // rule suppression with evidence for this permission.
-        this.nagSuppressionInputs.push({
-          id: NagSuppressionRuleIds.SMG4,
-          details: [
-            {
-              path: `${this.stackName}/${pascalCase(user.username)}Secret/Resource`,
-              reason: 'Accelerator users created as per iam-config file, MFA usage is enforced with boundary policy',
-            },
-          ],
-        });
-
-        this.logger.info(`User - password stored to ${this.props.prefixes.secretName}/${user.username}`);
+        // check if console excess should be created, default to true if value is not set to preserve current behavior.
+        const disableConsoleAccess = user.disableConsoleAccess ?? false;
+        let password: cdk.SecretValue | undefined = undefined;
+        if (!disableConsoleAccess) {
+          const secret = this.createSecretForUser(user, this.props.prefixes.secretName);
+          password = secret.secretValueFromJson('password');
+          this.logger.info(`User - password stored to ${this.props.prefixes.secretName}/${user.username}`);
+        }
 
         this.users[user.username] = new cdk.aws_iam.User(this, pascalCase(user.username), {
           userName: user.username,
-          password: secret.secretValueFromJson('password'),
+          password: password,
           groups: [this.groups[user.group]],
           permissionsBoundary: this.policies[user.boundaryPolicy],
-          passwordResetRequired: true,
+          passwordResetRequired: password === undefined ? false : true,
         });
 
         this.addSsmParameter({
@@ -953,12 +968,16 @@ export class OperationsStack extends AcceleratorStack {
    * @returns cdk.aws_kms.Key | undefined
    */
   private lookupAssetBucketKmsKey(props: AcceleratorStackProps, firewallRoles: string[]): cdk.aws_kms.IKey | undefined {
-    if (props.globalConfig.homeRegion === cdk.Stack.of(this).region || firewallRoles.length > 0) {
+    if (this.isHomeRegion(props.globalConfig.homeRegion) || firewallRoles.length > 0) {
+      const assetBucketKmsKeyArnSsmParameterArn = this.props.globalConfig.logging.assetBucket?.importedBucket
+        ?.createAcceleratorManagedKey
+        ? `${this.acceleratorResourceNames.parameters.importedAssetsBucketCmkArn}`
+        : `${this.acceleratorResourceNames.parameters.assetsBucketCmkArn}`;
       return new KeyLookup(this, 'AssetsBucketKms', {
         accountId: this.props.accountsConfig.getManagementAccountId(),
         keyRegion: this.props.globalConfig.homeRegion,
         roleName: this.acceleratorResourceNames.roles.crossAccountAssetsBucketCmkArnSsmParameterAccess,
-        keyArnParameterName: this.acceleratorResourceNames.parameters.assetsBucketCmkArn,
+        keyArnParameterName: assetBucketKmsKeyArnSsmParameterArn,
         kmsKey: this.cloudwatchKey,
         logRetentionInDays: this.props.globalConfig.cloudwatchLogRetentionInDays,
         acceleratorPrefix: this.props.prefixes.accelerator,
@@ -971,19 +990,16 @@ export class OperationsStack extends AcceleratorStack {
    * Create ACM certificate asset bucket access role
    * @param assetBucketKmsKey
    */
-  private createAssetAccessRole(assetBucketKmsKey?: cdk.aws_kms.IKey) {
+  private createAssetAccessRole(props: AcceleratorStackProps, assetBucketKmsKey?: cdk.aws_kms.IKey) {
     if (!assetBucketKmsKey) {
       throw new Error(
         `Asset bucket KMS key is undefined. KMS key must be defined so permissions can be added to the custom resource role.`,
       );
     }
 
-    const accessBucketArn = `arn:${this.props.partition}:s3:::${
-      this.acceleratorResourceNames.bucketPrefixes.assets
-    }-${this.props.accountsConfig.getManagementAccountId()}-${this.props.globalConfig.homeRegion}`;
-
+    const accessBucketArn = `arn:${this.props.partition}:s3:::${this.getAssetBucketName()}`;
     const accountId = cdk.Stack.of(this).account;
-
+    const managementAccountId = props.accountsConfig.getManagementAccountId();
     const accessRoleResourceName = `AssetAccessRole${accountId}`;
     const assetsAccessRole = new cdk.aws_iam.Role(this, accessRoleResourceName, {
       roleName: `${this.props.prefixes.accelerator}-AssetsAccessRole`,
@@ -1013,17 +1029,62 @@ export class OperationsStack extends AcceleratorStack {
     );
     assetsAccessRole.addToPolicy(
       new cdk.aws_iam.PolicyStatement({
+        resources: [`arn:${this.props.partition}:ssm:*:${managementAccountId}:parameter/*`],
+        actions: ['ssm:PutParameter', 'ssm:DeleteParameter', 'ssm:GetParameter'],
+      }),
+    );
+    assetsAccessRole.addToPolicy(
+      new cdk.aws_iam.PolicyStatement({
         resources: [`arn:${this.props.partition}:ssm:*:${accountId}:parameter/*`],
         actions: ['ssm:PutParameter', 'ssm:DeleteParameter', 'ssm:GetParameter'],
       }),
     );
 
-    assetsAccessRole.addToPolicy(
-      new cdk.aws_iam.PolicyStatement({
-        resources: [assetBucketKmsKey.keyArn],
-        actions: ['kms:Decrypt'],
-      }),
-    );
+    if (
+      props.globalConfig.logging.assetBucket?.importedBucket?.createAcceleratorManagedKey &&
+      cdk.Stack.of(this).account === managementAccountId
+    ) {
+      const key = cdk.aws_kms.Key.fromKeyArn(
+        this,
+        'AcceleratorGetImportAssetsBucketKey',
+        cdk.aws_ssm.StringParameter.valueForStringParameter(
+          this,
+          this.acceleratorResourceNames.parameters.importedAssetsBucketCmkArn,
+        ),
+      );
+      assetsAccessRole.addToPolicy(
+        new cdk.aws_iam.PolicyStatement({
+          resources: [key.keyArn],
+          actions: ['kms:Decrypt'],
+        }),
+      );
+    } else if (
+      props.globalConfig.logging.assetBucket?.importedBucket?.createAcceleratorManagedKey &&
+      cdk.Stack.of(this).account !== managementAccountId
+    ) {
+      const key = new KeyLookup(this, 'AcceleratorGetImportAssetsBucketKey', {
+        accountId: this.props.accountsConfig.getManagementAccountId(),
+        keyRegion: this.props.globalConfig.homeRegion,
+        roleName: this.acceleratorResourceNames.roles.crossAccountAssetsBucketCmkArnSsmParameterAccess,
+        keyArnParameterName: this.acceleratorResourceNames.parameters.importedAssetsBucketCmkArn,
+        kmsKey: this.cloudwatchKey,
+        logRetentionInDays: this.props.globalConfig.cloudwatchLogRetentionInDays,
+        acceleratorPrefix: this.props.prefixes.accelerator,
+      }).getKey();
+      assetsAccessRole.addToPolicy(
+        new cdk.aws_iam.PolicyStatement({
+          resources: [key.keyArn],
+          actions: ['kms:Decrypt'],
+        }),
+      );
+    } else {
+      assetsAccessRole.addToPolicy(
+        new cdk.aws_iam.PolicyStatement({
+          resources: [assetBucketKmsKey.keyArn],
+          actions: ['kms:Decrypt'],
+        }),
+      );
+    }
 
     // AwsSolutions-IAM5: The IAM entity contains wildcard permissions and does not have a cdk_nag rule suppression with evidence for those permission
     // rule suppression with evidence for this permission.
@@ -1256,7 +1317,7 @@ export class OperationsStack extends AcceleratorStack {
     });
 
     const firewallConfigRole = new cdk.aws_iam.Role(this, 'FirewallConfigRole', {
-      assumedBy: new cdk.aws_iam.ServicePrincipal(`lambda.${this.urlSuffix}`),
+      assumedBy: new cdk.aws_iam.ServicePrincipal(`lambda.amazonaws.com`),
       description: 'Landing Zone Accelerator firewall configuration custom resource access role',
       managedPolicies: [firewallConfigPolicy, lambdaExecutionPolicy],
       roleName: this.acceleratorResourceNames.roles.firewallConfigFunctionRoleName,

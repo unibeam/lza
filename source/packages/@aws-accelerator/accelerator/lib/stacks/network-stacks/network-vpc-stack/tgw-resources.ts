@@ -89,9 +89,13 @@ export class TgwResources {
       transitGatewayAccountIds.forEach(accountId => {
         principals.push(new cdk.aws_iam.AccountPrincipal(accountId));
       });
+      const roleArns = [
+        `arn:${cdk.Stack.of(this.stack).partition}:iam::*:role/${
+          props.prefixes.accelerator
+        }-*-CustomGetTransitGateway*`,
+      ];
       const role = new cdk.aws_iam.Role(this.stack, 'DescribeTgwAttachRole', {
         roleName: `${props.prefixes.accelerator}-DescribeTgwAttachRole-${cdk.Stack.of(this.stack).region}`,
-        assumedBy: new cdk.aws_iam.CompositePrincipal(...principals),
         inlinePolicies: {
           default: new cdk.aws_iam.PolicyDocument({
             statements: [
@@ -103,6 +107,14 @@ export class TgwResources {
             ],
           }),
         },
+        assumedBy: new cdk.aws_iam.PrincipalWithConditions(new cdk.aws_iam.CompositePrincipal(...principals), {
+          ArnLike: {
+            'aws:PrincipalArn': roleArns,
+          },
+          StringEquals: {
+            'aws:PrincipalOrgID': this.stack.organizationId,
+          },
+        }),
       });
       // AwsSolutions-IAM5: The IAM entity contains wildcard permissions and does not have a cdk_nag rule suppression with evidence for those permission.
       // rule suppression with evidence for this permission.
@@ -323,11 +335,21 @@ export class TgwResources {
     }
   }
 
+  private createAcceptorList(props: AcceleratorStackProps): string[] {
+    const principals: string[] = [];
+    for (const transitGatewayPeeringItem of props.networkConfig.transitGatewayPeering ?? []) {
+      const accepterAccountId = props.accountsConfig.getAccountId(transitGatewayPeeringItem.accepter.account);
+      principals.push(accepterAccountId);
+    }
+    return principals;
+  }
+
   /**
    * Function to create TGW peering
    */
   private createTransitGatewayPeering(props: AcceleratorStackProps): Map<string, string> {
     const tgwPeeringMap = new Map<string, string>();
+    const principals = this.createAcceptorList(props);
 
     for (const transitGatewayPeeringItem of props.networkConfig.transitGatewayPeering ?? []) {
       // Get account IDs
@@ -397,6 +419,7 @@ export class TgwResources {
           {
             requester: {
               accountName: transitGatewayPeeringItem.requester.account,
+              principals: principals,
               transitGatewayId: cdk.aws_ssm.StringParameter.valueForStringParameter(
                 this.stack,
                 this.stack.getSsmPath(SsmResourceType.TGW, [transitGatewayPeeringItem.requester.transitGatewayName]),

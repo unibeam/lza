@@ -128,6 +128,13 @@ export enum SsmResourceType {
    */
   VPC_PEERING = '/network/vpcPeering/${0}/id',
   /**
+   * CIDRs that have been deployed in a VPC.
+   *
+   * `${0}` is replaced with the account name
+   * `${1}` is replaced with the vpc name
+   */
+  VALIDATION_VPC_CIDRS = '/validation/${0}/network/vpc/${1}/deployedCidrs',
+  /**
    * Internet gateway ID
    *
    * `${0}` is replaced with the VPC name
@@ -421,6 +428,12 @@ export enum SsmResourceType {
    * `${0}` is replaced with the Firewall Instance Name
    */
   FIREWALL_INSTANCE = '/network/ec2/firewall/instanceName/${0}/instanceId',
+  /**
+   * Firewall ENI
+   * `${0}` is replaced with the Firewall Instance Name
+   * ``${1}` is replaced with the Firewall ENI Index
+   */
+  FIREWALL_ENI = '/network/ec2/firewall/instanceName/${0}/eni/${1}',
   /**
    *  Managed AD Directory Id
    * `${0}` is replaced with the Directory Friendly Name

@@ -28,6 +28,7 @@ export enum RepositorySources {
   GITHUB = 'github',
   CODECOMMIT = 'codecommit',
   S3 = 's3',
+  CODECONNECTION = 'codeconnection',
 }
 
 export interface InstallerStackProps extends cdk.StackProps {
@@ -39,7 +40,14 @@ export interface InstallerStackProps extends cdk.StackProps {
    * Enable tester flag
    */
   readonly enableTester: boolean;
-
+  /**
+   * Use existing S3 bucket for LZA source code
+   */
+  readonly useS3Source: boolean;
+  /**
+   * KMS key ARN associated with an encrypted S3 bucket containing LZA source code
+   */
+  readonly s3SourceKmsKeyArn?: string;
   /**
    * Management Cross account role name
    */
@@ -52,10 +60,14 @@ export interface InstallerStackProps extends cdk.StackProps {
    * Accelerator Permission boundary usage flag
    */
   readonly usePermissionBoundary: boolean;
+  /**
+   * Region by region deployment usage flag
+   */
+  readonly enableRegionByRegionDeployment: boolean;
 }
 
 export class InstallerStack extends cdk.Stack {
-  private readonly repositorySource = new cdk.CfnParameter(this, 'RepositorySource', {
+  private repositorySource = new cdk.CfnParameter(this, 'RepositorySource', {
     type: 'String',
     description: 'Specify the location to use to host the LZA source code',
     allowedValues: [RepositorySources.GITHUB, RepositorySources.CODECOMMIT],
@@ -97,7 +109,8 @@ export class InstallerStack extends cdk.Stack {
 
   private readonly managementAccountEmail = new cdk.CfnParameter(this, 'ManagementAccountEmail', {
     type: 'String',
-    description: 'The management (primary) account email',
+    description:
+      'The management (primary) account email - NOTE: This must match the address of the management account email as listed in AWS Organizations > AWS accounts.',
     allowedPattern: '[^\\s@]+@[^\\s@]+\\.[^\\s@]+',
     constraintDescription: 'Must be a valid email address matching "[^\\s@]+@[^\\s@]+\\.[^\\s@]+"',
   });
@@ -118,7 +131,8 @@ export class InstallerStack extends cdk.Stack {
 
   private readonly controlTowerEnabled = new cdk.CfnParameter(this, 'ControlTowerEnabled', {
     type: 'String',
-    description: 'Select yes if you deploying to a Control Tower environment.  Select no if using just Organizations',
+    description:
+      'Select yes if deploying to a Control Tower environment.  Select no if using just Organizations. If no, you must first set up mandatory accounts.',
     allowedValues: ['Yes', 'No'],
     default: 'Yes',
   });
@@ -135,7 +149,7 @@ export class InstallerStack extends cdk.Stack {
   private readonly configurationRepositoryLocation = new cdk.CfnParameter(this, 'ConfigurationRepositoryLocation', {
     type: 'String',
     description: 'Specify the location to use to host the LZA configuration files',
-    allowedValues: [RepositorySources.CODECOMMIT, RepositorySources.S3],
+    allowedValues: [RepositorySources.CODECOMMIT, RepositorySources.S3, RepositorySources.CODECONNECTION],
   });
 
   /**
@@ -147,7 +161,29 @@ export class InstallerStack extends cdk.Stack {
     allowedValues: ['Yes', 'No'],
     default: 'No',
     description:
-      'Select Yes if deploying the solution with an existing CodeCommit configuration repository. Leave the default value if using the solution-deployed repository. If the AcceleratorPrefix parameter is set to the default value, the solution will deploy a repository named "aws-accelerator-config." Otherwise, the solution-deployed repository will be named "AcceleratorPrefix-config." Note: Updating this value after initial installation may cause adverse affects.',
+      'Select Yes if deploying the solution with an existing configuration repository. Leave the default value if using the solution-deployed repository. If the AcceleratorPrefix parameter is set to the default value, the solution will deploy a repository named "aws-accelerator-config." Otherwise, the solution-deployed repository will be named "AcceleratorPrefix-config." Note: Updating this value after initial installation may cause adverse affects.',
+  });
+
+  /**
+   * Existing AWS Code Connection ARN
+   * @private
+   */
+  private readonly configCodeConnectionArn = new cdk.CfnParameter(this, 'ConfigCodeConnectionArn', {
+    type: 'String',
+    description:
+      'The ARN of an AWS CodeConnection referencing your existing LZA configuration repository. To use this parameter, useExistingConfigRepo must be set to Yes and ConfigurationRepositoryLocation must be set to codeconnection.',
+    default: '',
+  });
+
+  /**
+   * Existing LZ Accelerator configuration repository owner
+   * @private
+   */
+  private readonly existingConfigRepositoryOwner = new cdk.CfnParameter(this, 'ExistingConfigRepositoryOwner', {
+    type: 'String',
+    description:
+      'The owner ID or namespace of the LZA configuration repository accessed through CodeConnection, such as the owner ID in GitHub. (CodeConnection only)',
+    default: '',
   });
 
   /**
@@ -156,7 +192,7 @@ export class InstallerStack extends cdk.Stack {
    */
   private readonly existingConfigRepositoryName = new cdk.CfnParameter(this, 'ExistingConfigRepositoryName', {
     type: 'String',
-    description: 'The name of an existing CodeCommit repository hosting the accelerator configuration.',
+    description: 'The name of an existing LZA configuration repository hosting the accelerator configuration.',
     default: '',
   });
 
@@ -170,7 +206,7 @@ export class InstallerStack extends cdk.Stack {
     {
       type: 'String',
       description:
-        'Specify the branch name of existing CodeCommit repository to pull the accelerator configuration from.',
+        'Specify the branch name of the existing LZA configuration repository to pull the accelerator configuration from.',
       default: '',
     },
   );
@@ -206,10 +242,34 @@ export class InstallerStack extends cdk.Stack {
   private readonly acceleratorQualifier: cdk.CfnParameter | undefined;
 
   /**
+   * Existing S3 bucket for LZA source code
+   * @private
+   */
+  private readonly repositoryBucketName: cdk.CfnParameter | undefined;
+
+  /**
+   * S3 object key for LZA source code
+   * @private
+   */
+  private readonly repositoryBucketObject: cdk.CfnParameter | undefined;
+
+  /**
+   * Existing S3 bucket KMS encryption key for LZA source code
+   * @private
+   */
+  private readonly repositoryBucketKmsKeyArn: cdk.CfnParameter | undefined;
+
+  /**
    * Permission boundary SSM Parameter Path
    * @private
    */
   private readonly acceleratorPermissionBoundary: cdk.CfnParameter | undefined;
+
+  /**
+   * Deploy order for LZA region by region deployment
+   * @private
+   */
+  private readonly regionByRegionDeployOrder: cdk.CfnParameter | undefined;
 
   constructor(scope: Construct, id: string, props: InstallerStackProps) {
     super(scope, id, props);
@@ -225,6 +285,12 @@ export class InstallerStack extends cdk.Stack {
         },
         'aws-us-gov': {
           regionName: 'us-gov-west-1',
+        },
+        'aws-iso-e': {
+          regionName: 'eu-isoe-west-1',
+        },
+        'aws-iso-f': {
+          regionName: 'us-isof-south-1',
         },
         'aws-iso-b': {
           regionName: 'us-isob-east-1',
@@ -275,12 +341,14 @@ export class InstallerStack extends cdk.Stack {
           this.useExistingConfigRepo.logicalId,
           this.existingConfigRepositoryName.logicalId,
           this.existingConfigRepositoryBranchName.logicalId,
+          this.existingConfigRepositoryOwner.logicalId,
+          this.configCodeConnectionArn.logicalId,
         ],
       },
     ];
 
     const repositoryParameterLabels: { [p: string]: { default: string } } = {
-      [this.repositorySource.logicalId]: { default: 'Source' },
+      [this.repositorySource.logicalId]: { default: 'Source Location' },
       [this.repositoryOwner.logicalId]: { default: 'Repository Owner' },
       [this.repositoryName.logicalId]: { default: 'Repository Name' },
       [this.repositoryBranchName.logicalId]: { default: 'Branch Name' },
@@ -288,6 +356,8 @@ export class InstallerStack extends cdk.Stack {
       [this.useExistingConfigRepo.logicalId]: { default: 'Use Existing Config Repository' },
       [this.existingConfigRepositoryName.logicalId]: { default: 'Existing Config Repository Name' },
       [this.existingConfigRepositoryBranchName.logicalId]: { default: 'Existing Config Repository Branch Name' },
+      [this.existingConfigRepositoryOwner.logicalId]: { default: 'Existing Config Repository Owner' },
+      [this.configCodeConnectionArn.logicalId]: { default: 'Existing Config Repository CodeConnection ARN' },
       [this.enableDiagnosticsPack.logicalId]: { default: 'Enable Diagnostics Pack' },
       [this.enableApprovalStage.logicalId]: { default: 'Enable Approval Stage' },
       [this.approvalStageNotifyEmailList.logicalId]: { default: 'Manual Approval Stage notification email list' },
@@ -300,6 +370,40 @@ export class InstallerStack extends cdk.Stack {
 
     let targetAcceleratorParameterLabels: { [p: string]: { default: string } } = {};
     let targetAcceleratorEnvVariables: { [p: string]: cdk.aws_codebuild.BuildEnvironmentVariable } = {};
+    let s3EnvVariables: { [p: string]: cdk.aws_codebuild.BuildEnvironmentVariable } = {};
+
+    if (props.enableRegionByRegionDeployment) {
+      this.regionByRegionDeployOrder = new cdk.CfnParameter(this, 'RegionByRegionDeployOrder', {
+        type: 'String',
+        description: 'Provide comma(,) separated list of aws regions as order of LZA region by region deployment',
+      });
+
+      const regionByRegionDeploymentNotifyEmailSetting = new cdk.CfnRule(this, 'RequiredEmailNotification', {
+        ruleCondition: cdk.Fn.conditionNot(cdk.Fn.conditionEquals(this.regionByRegionDeployOrder.valueAsString, '')),
+      });
+
+      regionByRegionDeploymentNotifyEmailSetting.addAssertion(
+        cdk.Fn.conditionEquals(this.enableApprovalStage, 'Yes'),
+        'Review notification setting is required when region by region deployment is enabled',
+      );
+
+      parameterGroups.push({
+        Label: { default: 'Region By Region Deployment Configuration' },
+        Parameters: [this.regionByRegionDeployOrder.logicalId],
+      });
+
+      repositoryParameterLabels[this.regionByRegionDeployOrder.logicalId] = {
+        default: 'Region by Region Deployment Order',
+      };
+
+      targetAcceleratorEnvVariables = {
+        ...targetAcceleratorEnvVariables,
+        REGION_BY_REGION_DEPLOYMENT_ORDER: {
+          type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
+          value: this.regionByRegionDeployOrder.valueAsString,
+        },
+      };
+    }
 
     if (props.usePermissionBoundary) {
       this.acceleratorPermissionBoundary = new cdk.CfnParameter(this, 'AcceleratorPermissionBoundary', {
@@ -371,6 +475,68 @@ export class InstallerStack extends cdk.Stack {
       };
     }
 
+    // cdk context feature flag to use S3 for LZA source code
+    if (props.useS3Source) {
+      this.repositorySource.allowedValues?.push(RepositorySources.S3);
+      this.repositorySource.default = RepositorySources.S3;
+
+      this.repositoryBucketName = new cdk.CfnParameter(this, 'RepositoryBucketName', {
+        type: 'String',
+        description: 'The versioned S3 bucket containing the accelerator code. (S3 Only)',
+      });
+
+      this.repositoryBucketObject = new cdk.CfnParameter(this, 'RepositoryBucketObject', {
+        type: 'String',
+        description: 'The full path to the accelerator code zip S3 Object. (S3 Only)',
+        default: `release/v${version}.zip`,
+      });
+
+      s3EnvVariables = {
+        ACCELERATOR_REPOSITORY_BUCKET_NAME: {
+          type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
+          value: this.repositoryBucketName.valueAsString,
+        },
+        ACCELERATOR_REPOSITORY_BUCKET_OBJECT: {
+          type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
+          value: this.repositoryBucketObject.valueAsString,
+        },
+      };
+
+      /**
+       * Optional context flag "s3-source-kms-key-arn" required to specify KMS key for encrypted LZA source buckets
+       */
+      if (props.s3SourceKmsKeyArn) {
+        this.repositoryBucketKmsKeyArn = new cdk.CfnParameter(this, 'RepositoryBucketKmsKeyArn', {
+          type: 'String',
+          description: 'The KMS key used for encrypted S3 bucket containing accelerator code. (S3 Only)',
+          default: props.s3SourceKmsKeyArn,
+        });
+        s3EnvVariables['ACCELERATOR_REPOSITORY_BUCKET_KMS_KEY_ARN'] = {
+          type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
+          value: this.repositoryBucketKmsKeyArn.valueAsString,
+        };
+      }
+
+      // replace template Source Code parameterGroup
+      parameterGroups[0] = {
+        Label: { default: 'Source Code Repository Configuration' },
+        Parameters: [
+          this.repositorySource.logicalId,
+          this.repositoryBucketName.logicalId,
+          this.repositoryBucketObject.logicalId,
+        ],
+      };
+
+      parameterGroups.push({
+        Label: { default: 'Git Repository Configuration (not used with S3)' },
+        Parameters: [
+          this.repositoryOwner.logicalId,
+          this.repositoryName.logicalId,
+          this.repositoryBranchName.logicalId,
+        ],
+      });
+    }
+
     const resourceNamePrefixes = new ResourceNamePrefixes(this, 'ResourceNamePrefixes', {
       acceleratorPrefix: this.acceleratorPrefix.valueAsString,
       acceleratorQualifier: this.acceleratorQualifier?.valueAsString,
@@ -437,14 +603,58 @@ export class InstallerStack extends cdk.Stack {
       }-*`;
     }
 
-    // Validate Installer Parameters
+    // Validate Installer Parameters with CFN Rule Assertions
+    const requiredParametersForCodeConnection = new cdk.CfnRule(this, 'RequiredParametersForCodeConnection', {
+      ruleCondition: cdk.Fn.conditionEquals('codeconnection', this.configurationRepositoryLocation.valueAsString),
+    });
+
+    requiredParametersForCodeConnection.addAssertion(
+      cdk.Fn.conditionNot(cdk.Fn.conditionEquals('', this.configCodeConnectionArn.valueAsString)),
+      'codeconnectionArn parameter must be provided when configRepositoryLocation is set to codeconnection',
+    );
+
+    requiredParametersForCodeConnection.addAssertion(
+      cdk.Fn.conditionNot(cdk.Fn.conditionEquals('No', this.useExistingConfigRepo.valueAsString)),
+      'useExistingConfigRepo parameter must be set to "Yes" when configRepositoryLocation is set to codeconnection',
+    );
+
+    requiredParametersForCodeConnection.addAssertion(
+      cdk.Fn.conditionNot(cdk.Fn.conditionEquals('', this.existingConfigRepositoryOwner.valueAsString)),
+      'existingConfigRepositoryOwner parameter must be populated when configRepositoryLocation is set to codeconnection',
+    );
+
+    // Add assertions for customers using a pre-existing config repo
+    const requiredParametersForExistingRepo = new cdk.CfnRule(this, 'RequiredParametersForExistingRepo', {
+      ruleCondition: cdk.Fn.conditionEquals('Yes', this.useExistingConfigRepo.valueAsString),
+    });
+
+    requiredParametersForExistingRepo.addAssertion(
+      cdk.Fn.conditionNot(cdk.Fn.conditionEquals('', this.existingConfigRepositoryBranchName.valueAsString)),
+      'existingConfigRepositoryBranchName parameter must be provided when useExistingRepository is set to Yes',
+    );
+
+    requiredParametersForExistingRepo.addAssertion(
+      cdk.Fn.conditionNot(cdk.Fn.conditionEquals('', this.existingConfigRepositoryName.valueAsString)),
+      'existingConfigRepositoryName parameter must be provided when useExistingRepository is set to Yes',
+    );
+
+    // Add assertions for customers using S3 as a config repo
+    const requiredParametersForS3Repo = new cdk.CfnRule(this, 'RequiredParametersForS3Repo', {
+      ruleCondition: cdk.Fn.conditionEquals('s3', this.configurationRepositoryLocation.valueAsString),
+    });
+
+    requiredParametersForS3Repo.addAssertion(
+      cdk.Fn.conditionAnd(
+        cdk.Fn.conditionEquals('', this.existingConfigRepositoryName.valueAsString),
+        cdk.Fn.conditionEquals('', this.existingConfigRepositoryBranchName.valueAsString),
+        cdk.Fn.conditionEquals('No', this.useExistingConfigRepo.valueAsString),
+      ),
+      'Existing configuration repository parameters cannot be provided when configurationRepositoryLocation is set to s3',
+    );
 
     const validatorFunction = new Validate(this, 'ValidateInstaller', {
-      useExistingConfigRepo: this.useExistingConfigRepo.valueAsString,
       acceleratorPipelineName: acceleratorPipelineName,
       configRepositoryLocation: this.configurationRepositoryLocation.valueAsString,
-      existingConfigRepositoryName: this.existingConfigRepositoryName.valueAsString,
-      existingConfigRepositoryBranchName: this.existingConfigRepositoryBranchName.valueAsString,
     });
     // cfn-nag suppression
     const validatorFunctionResource = validatorFunction.node.findChild('ValidationFunction').node
@@ -553,7 +763,7 @@ export class InstallerStack extends cdk.Stack {
           Sid: 'Allow Cloudwatch Logs service to use the encryption key',
           Effect: 'Allow',
           Principal: {
-            Service: `logs.${cdk.Stack.of(this).region}.${cdk.Stack.of(this).urlSuffix}`,
+            Service: `logs.${cdk.Stack.of(this).region}.amazonaws.com`,
           },
           Action: ['kms:Encrypt', 'kms:Decrypt', 'kms:ReEncrypt*', 'kms:GenerateDataKey*', 'kms:DescribeKey'],
           Resource: '*',
@@ -650,7 +860,14 @@ export class InstallerStack extends cdk.Stack {
       serverAccessLogsBucket: installerServerAccessLogsBucket.getS3Bucket(),
     });
 
+    let roleName: string | undefined = undefined;
+
+    if (props.useExternalPipelineAccount) {
+      roleName = `${this.acceleratorQualifier!.valueAsString}-installer-admin-role`;
+    }
+
     const installerRole = new cdk.aws_iam.Role(this, 'InstallerAdminRole', {
+      roleName,
       assumedBy: new cdk.aws_iam.ServicePrincipal('codebuild.amazonaws.com'),
       managedPolicies: [cdk.aws_iam.ManagedPolicy.fromAwsManagedPolicyName('AdministratorAccess')],
     });
@@ -691,15 +908,19 @@ export class InstallerStack extends cdk.Stack {
                   sed -i "s#registry.yarnpkg.com#registry.npmmirror.com#g" yarn.lock;
                   set -e && yarn config set registry https://registry.npmmirror.com
                fi`,
-              'yarn install',
+              'if [ -f .yarnrc ]; then yarn install --use-yarnrc .yarnrc; else yarn install; fi',
               'yarn build',
               'cd packages/@aws-accelerator/installer',
               `set -e && if [ "$BOOTSTRAPPED_HOME" = "no" ]; then yarn run cdk bootstrap --toolkitStackName ${acceleratorPrefix}-CDKToolkit aws://${cdk.Aws.ACCOUNT_ID}/${cdk.Aws.REGION} --qualifier accel; fi`,
               `set -e &&  if [ "$BOOTSTRAPPED_GLOBAL" = "no" ]; then yarn run cdk bootstrap --toolkitStackName ${acceleratorPrefix}-CDKToolkit aws://${cdk.Aws.ACCOUNT_ID}/${globalRegion} --qualifier accel; fi`,
               `set -e && if [ $ENABLE_EXTERNAL_PIPELINE_ACCOUNT = "yes" ]; then
-                  export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s" $(aws sts assume-role --role-arn arn:${
+                  if ! MANAGEMENT_ACCOUNT_CREDENTIAL=$(aws sts assume-role --role-arn arn:${
                     cdk.Stack.of(this).partition
-                  }:iam::"$MANAGEMENT_ACCOUNT_ID":role/"$MANAGEMENT_ACCOUNT_ROLE_NAME" --role-session-name acceleratorAssumeRoleSession --query "Credentials.[AccessKeyId,SecretAccessKey,SessionToken]" --output text));
+                  }:iam::"$MANAGEMENT_ACCOUNT_ID":role/"$MANAGEMENT_ACCOUNT_ROLE_NAME" --role-session-name acceleratorAssumeRoleSession --query "Credentials.[AccessKeyId,SecretAccessKey,SessionToken]" --output text); then
+                    echo "Failed to assume $MANAGEMENT_ACCOUNT_ROLE_NAME role in management account $MANAGEMENT_ACCOUNT_ID"
+                    exit 1
+                  fi
+                  export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s" $MANAGEMENT_ACCOUNT_CREDENTIAL);
                   if ! aws cloudformation describe-stacks --stack-name ${acceleratorPrefix}-CDKToolkit --region ${
                 cdk.Aws.REGION
               }; then MGMT_BOOTSTRAPPED_HOME="no"; fi;
@@ -732,7 +953,7 @@ export class InstallerStack extends cdk.Stack {
           post_build: {
             commands: [
               `if [ $CODEBUILD_BUILD_SUCCEEDING -eq 1 ]; then
-                inprogress_status_count=$(aws codepipeline get-pipeline-state --name "${acceleratorPipelineName}" | grep '"status": "InProgress"' | grep -v grep | wc -l) && 
+                inprogress_status_count=$(aws codepipeline get-pipeline-state --name "${acceleratorPipelineName}" | grep '"status": "InProgress"' | grep -v grep | wc -l) &&
                 if [ $inprogress_status_count -eq 0 ]; then
                 set -e && aws codepipeline start-pipeline-execution --name "${acceleratorPipelineName}";
                   fi
@@ -748,7 +969,7 @@ export class InstallerStack extends cdk.Stack {
         environmentVariables: {
           NODE_OPTIONS: {
             type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
-            value: '--max_old_space_size=12288',
+            value: '--max_old_space_size=12288 --no-warnings',
           },
           CDK_NEW_BOOTSTRAP: {
             type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
@@ -774,6 +995,10 @@ export class InstallerStack extends cdk.Stack {
             type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
             value: this.configurationRepositoryLocation.valueAsString,
           },
+          CODECONNECTION_ARN: {
+            type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
+            value: this.configCodeConnectionArn.valueAsString,
+          },
           USE_EXISTING_CONFIG_REPO: {
             type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
             value: this.useExistingConfigRepo.valueAsString,
@@ -785,6 +1010,10 @@ export class InstallerStack extends cdk.Stack {
           EXISTING_CONFIG_REPOSITORY_BRANCH_NAME: {
             type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
             value: this.existingConfigRepositoryBranchName.valueAsString,
+          },
+          EXISTING_CONFIG_REPOSITORY_OWNER: {
+            type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
+            value: this.existingConfigRepositoryOwner.valueAsString,
           },
           ACCELERATOR_ENABLE_APPROVAL_STAGE: {
             type: cdk.aws_codebuild.BuildEnvironmentVariableType.PLAINTEXT,
@@ -828,6 +1057,7 @@ export class InstallerStack extends cdk.Stack {
           },
           ...targetAcceleratorEnvVariables,
           ...targetAcceleratorTestEnvVariables,
+          ...s3EnvVariables,
         },
       },
     });
@@ -1077,6 +1307,86 @@ export class InstallerStack extends cdk.Stack {
       .defaultChild as cdk.aws_logs.CfnLogGroup;
     cfnUpdatePipelineGithubTokenLogGroup.cfnOptions.condition = useGitHubCondition;
 
+    /**
+     * S3 Pipeline, available with useS3Source cdk context feature flag
+     */
+    let s3PipelinePaths: string[] = [];
+
+    if (props.useS3Source && this.repositoryBucketName && this.repositoryBucketObject) {
+      const s3PipelineRole = new cdk.aws_iam.Role(this, 'S3PipelineRole', {
+        assumedBy: new cdk.aws_iam.ServicePrincipal('codepipeline.amazonaws.com'),
+      });
+
+      /**
+       * Optional context flag "s3-source-kms-key-arn" for encrypted S3 buckets containing LZA source code
+       * requires pipeline roles to have additional KMS key access permissions
+       */
+      if (props.s3SourceKmsKeyArn) {
+        s3PipelineRole.addToPolicy(
+          new cdk.aws_iam.PolicyStatement({
+            actions: ['kms:Decrypt', 'kms:GenerateDataKey'],
+            resources: [props.s3SourceKmsKeyArn],
+          }),
+        );
+      }
+
+      s3PipelinePaths = [
+        'S3PipelineRole/DefaultPolicy/Resource',
+        'S3Pipeline/Source/Source/CodePipelineActionRole/DefaultPolicy/Resource',
+      ];
+
+      const s3Pipeline = new cdk.aws_codepipeline.Pipeline(this, 'S3Pipeline', {
+        pipelineName: installerPipelineName,
+        artifactBucket: bucket.getS3Bucket(),
+        restartExecutionOnUpdate: true,
+        role: s3PipelineRole,
+      });
+
+      s3Pipeline.addStage({
+        stageName: 'Source',
+        actions: [
+          new cdk.aws_codepipeline_actions.S3SourceAction({
+            actionName: 'Source',
+            bucket: cdk.aws_s3.Bucket.fromBucketName(this, 'ExistingBucket', this.repositoryBucketName.valueAsString),
+            bucketKey: this.repositoryBucketObject.valueAsString,
+            output: acceleratorRepoArtifact,
+            trigger: cdk.aws_codepipeline_actions.S3Trigger.NONE,
+            role: s3PipelineRole,
+          }),
+        ],
+      });
+
+      s3Pipeline.addStage({
+        stageName: 'Install',
+        actions: [
+          new cdk.aws_codepipeline_actions.CodeBuildAction({
+            actionName: 'Install',
+            project: installerProject,
+            input: acceleratorRepoArtifact,
+            role: s3PipelineRole,
+          }),
+        ],
+      });
+
+      const useS3Condition = new cdk.CfnCondition(this, 'UseS3Condition', {
+        expression: cdk.Fn.conditionNot(cdk.Fn.conditionEquals('', this.repositoryBucketName?.valueAsString)),
+      });
+
+      const cfnS3PipelinePolicy = s3PipelineRole.node.findChild('DefaultPolicy').node
+        .defaultChild as cdk.aws_iam.CfnPolicy;
+      cfnS3PipelinePolicy.cfnOptions.condition = useS3Condition;
+
+      const cfnS3PipelineRole = s3PipelineRole.node.defaultChild as cdk.aws_iam.CfnRole;
+      cfnS3PipelineRole.cfnOptions.condition = useS3Condition;
+
+      const cfnS3Pipeline = s3Pipeline.node.defaultChild as cdk.aws_codepipeline.CfnPipeline;
+      cfnS3Pipeline.cfnOptions.condition = useS3Condition;
+    }
+
+    /**
+     * cfn-nag suppressions
+     */
+
     // Suppressing due to missing field in aws-us-gov CFN spec
     cfnUpdatePipelineGithubTokenLogGroup.cfnOptions.metadata = {
       cfn_nag: {
@@ -1089,9 +1399,6 @@ export class InstallerStack extends cdk.Stack {
       },
     };
 
-    //
-    // cfn-nag suppressions
-    //
     // W12 IAM Policy allows * on KMS decrypt because Secrets Manager key can be encrypted with user selected key.
     const cfnLambdaFunctionPolicy = updatePipelineLambdaPolicy.node.defaultChild as cdk.aws_iam.CfnPolicy;
     cfnLambdaFunctionPolicy.cfnOptions.metadata = {
@@ -1126,6 +1433,7 @@ export class InstallerStack extends cdk.Stack {
       'CodeCommitPipeline/Source/Source/CodePipelineActionRole/DefaultPolicy/Resource',
       'UpdatePipelineLambdaPolicy/Resource',
       'GitHubPipelineRole/DefaultPolicy/Resource',
+      ...s3PipelinePaths,
     ];
 
     const cb3SuppressionPaths = ['InstallerProject/Resource'];

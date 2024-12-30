@@ -144,20 +144,26 @@ export class AccountsConfig implements i.IAccountsConfig {
    * @returns
    */
   static load(dir: string): AccountsConfig {
+    if (!fs.existsSync(path.join(dir, AccountsConfig.FILENAME))) {
+      throw new Error(
+        `Error loading accounts-config.yaml. Please verify this file is at the root of the configuration repository or archive. If you are using S3, this may indicate your zip archive includes a nested aws-accelerator-config directory.`,
+      );
+    }
+
     const buffer = fs.readFileSync(path.join(dir, AccountsConfig.FILENAME), 'utf8');
     const values = parseAccountsConfig(yaml.load(buffer));
     const managementAccountEmail =
-      (values.mandatoryAccounts as unknown as i.IBaseAccountConfig[]).find(
-        value => value.name == AccountsConfig.MANAGEMENT_ACCOUNT,
-      )?.email || '<management-account>@example.com <----- UPDATE EMAIL ADDRESS';
+      (values.mandatoryAccounts as unknown as i.IBaseAccountConfig[])
+        .find(value => value.name == AccountsConfig.MANAGEMENT_ACCOUNT)
+        ?.email.toLocaleLowerCase() || '<management-account>@example.com <----- UPDATE EMAIL ADDRESS';
     const logArchiveAccountEmail =
-      (values.mandatoryAccounts as unknown as i.IBaseAccountConfig[]).find(
-        value => value.name == AccountsConfig.MANAGEMENT_ACCOUNT,
-      )?.email || '<management-account>@example.com <----- UPDATE EMAIL ADDRESS';
+      (values.mandatoryAccounts as unknown as i.IBaseAccountConfig[])
+        .find(value => value.name == AccountsConfig.MANAGEMENT_ACCOUNT)
+        ?.email.toLocaleLowerCase() || '<management-account>@example.com <----- UPDATE EMAIL ADDRESS';
     const auditAccountEmail =
-      (values.mandatoryAccounts as unknown as i.IBaseAccountConfig[]).find(
-        value => value.name == AccountsConfig.MANAGEMENT_ACCOUNT,
-      )?.email || '<management-account>@example.com <----- UPDATE EMAIL ADDRESS';
+      (values.mandatoryAccounts as unknown as i.IBaseAccountConfig[])
+        .find(value => value.name == AccountsConfig.MANAGEMENT_ACCOUNT)
+        ?.email.toLocaleLowerCase() || '<management-account>@example.com <----- UPDATE EMAIL ADDRESS';
 
     return new AccountsConfig(
       {
@@ -192,7 +198,7 @@ export class AccountsConfig implements i.IAccountsConfig {
         const stsCallerIdentity = await throttlingBackOff(() => stsClient.getCallerIdentity({}).promise());
         const currentAccountId = stsCallerIdentity.Account!;
         this.mandatoryAccounts.forEach(item => {
-          this.accountIds?.push({ email: item.email, accountId: currentAccountId });
+          this.accountIds?.push({ email: item.email.toLocaleLowerCase(), accountId: currentAccountId });
         });
         // orgs are enabled
       } else if (isOrgsEnabled) {
@@ -205,6 +211,16 @@ export class AccountsConfig implements i.IAccountsConfig {
         } else if (partition === 'aws-cn') {
           organizationsClient = new AWS.Organizations({
             region: 'cn-northwest-1',
+            credentials: managementAccountCredentials,
+          });
+        } else if (partition === 'aws-iso-f') {
+          organizationsClient = new AWS.Organizations({
+            region: 'us-isof-south-1',
+            credentials: managementAccountCredentials,
+          });
+        } else if (partition === 'aws-iso-e') {
+          organizationsClient = new AWS.Organizations({
+            region: 'eu-isoe-west-1',
             credentials: managementAccountCredentials,
           });
         } else {
@@ -223,7 +239,7 @@ export class AccountsConfig implements i.IAccountsConfig {
 
           page.Accounts?.forEach(item => {
             if (item.Email && item.Id) {
-              this.accountIds?.push({ email: item.Email, accountId: item.Id, status: item.Status });
+              this.accountIds?.push({ email: item.Email.toLocaleLowerCase(), accountId: item.Id, status: item.Status });
             }
           });
           nextToken = page.NextToken;
@@ -233,7 +249,7 @@ export class AccountsConfig implements i.IAccountsConfig {
         //There should be 3 or more accounts in accounts config.
       } else if (!isOrgsEnabled && (accountsConfig.accountIds ?? []).length > 2) {
         for (const account of accountsConfig.accountIds ?? []) {
-          this.accountIds?.push({ email: account.email, accountId: account.accountId });
+          this.accountIds?.push({ email: account.email.toLowerCase(), accountId: account.accountId });
         }
         // if orgs is disabled, the accountId is read from accounts config.
         //But less than 3 account Ids are provided then throw an error
@@ -244,8 +260,8 @@ export class AccountsConfig implements i.IAccountsConfig {
   }
 
   public getAccountId(name: string): string {
-    const email = this.getAccount(name).email;
-    const accountId = this.accountIds?.find(item => item.email === email)?.accountId;
+    const email = this.getAccount(name).email.toLocaleLowerCase();
+    const accountId = this.accountIds?.find(item => item.email.toLocaleLowerCase() === email)?.accountId;
     if (accountId) {
       return accountId;
     }
@@ -256,9 +272,9 @@ export class AccountsConfig implements i.IAccountsConfig {
   }
 
   public getAccountNameById(accountId: string): string | undefined {
-    const email = this.accountIds?.find(item => item.accountId === accountId)?.email;
+    const email = this.accountIds?.find(item => item.accountId === accountId)?.email.toLocaleLowerCase();
     const accounts = this.getAccounts(false);
-    const accountName = accounts.find(account => account.email === email)?.name;
+    const accountName = accounts.find(account => account.email.toLocaleLowerCase() === email)?.name;
 
     if (accountName) {
       return accountName;
@@ -270,10 +286,12 @@ export class AccountsConfig implements i.IAccountsConfig {
   }
 
   public getAccountIds(): string[] {
-    const accountEmails = [...this.mandatoryAccounts, ...this.workloadAccounts].map(account => account.email);
+    const accountEmails = [...this.mandatoryAccounts, ...this.workloadAccounts].map(account =>
+      account.email.toLocaleLowerCase(),
+    );
     const lzaAccounts =
       this.accountIds?.filter(item => {
-        if (accountEmails.includes(item.email)) {
+        if (accountEmails.includes(item.email.toLocaleLowerCase())) {
           if (!item.status) {
             return true;
           }

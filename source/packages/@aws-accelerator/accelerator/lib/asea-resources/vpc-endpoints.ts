@@ -3,7 +3,6 @@ import { AseaResource, AseaResourceProps } from './resource';
 import { pascalCase } from 'pascal-case';
 import { SsmResourceType } from '@aws-accelerator/utils/lib/ssm-parameter-path';
 import { ASEAMappings, AseaResourceType, NestedStack } from '@aws-accelerator/config';
-import { HostedZone } from '@aws-accelerator/constructs';
 import { CfnHostedZone } from 'aws-cdk-lib/aws-route53';
 const ASEA_PHASE_NUMBER = '2';
 const enum RESOURCE_TYPE {
@@ -49,6 +48,108 @@ export class VpcEndpoints extends AseaResource {
       if (!this.findResourceByName(existingVpcEndpointResources, 'VpcId', vpcId!)) {
         continue;
       }
+
+      // remove endpoints that are not in config
+      const configuredEndpoints: { service: string; serviceName: string }[] = [];
+      for (const endpointItem of vpcItem.interfaceEndpoints?.endpoints ?? []) {
+        configuredEndpoints.push({
+          service: endpointItem.service,
+          serviceName: this.interfaceVpcEndpointForRegionAndEndpointName(endpointItem.service),
+        });
+      }
+
+      for (const endpoint of existingVpcEndpointResources) {
+        const configuredEndpoint = configuredEndpoints.find(
+          ep => ep.serviceName === endpoint.resourceMetadata['Properties'].ServiceName,
+        );
+        if (!configuredEndpoint) {
+          this.scope.addLogs(
+            LogLevel.WARN,
+            `VPC Endpoint "${vpcItem.name}/${endpoint.resourceMetadata['Properties'].ServiceName}" is managed by ASEA but no Endpoint found in config`,
+          );
+          const configEndpointName = this.interfaceVpcEndpointConfigNameFromServiceName(
+            endpoint.resourceMetadata['Properties'].ServiceName,
+          );
+          this.scope.addDeleteFlagForAseaResource({
+            type: RESOURCE_TYPE.VPC_ENDPOINT_TYPE,
+            identifier: configEndpointName,
+            logicalId: endpoint.logicalResourceId,
+          });
+
+          const ssmResource = this.scope.importStackResources.getSSMParameterByName(
+            this.scope.getSsmPath(SsmResourceType.VPC_ENDPOINT, [vpcItem.name, configEndpointName]),
+          );
+          if (ssmResource) {
+            ssmResource.isDeleted = true;
+          }
+
+          // delete security group
+          const epSecurityGroupName = `ep_${configEndpointName}_sg`;
+          const epSecurityGroup = this.scope.importStackResources.getResourceByName('GroupName', epSecurityGroupName);
+          if (epSecurityGroup) {
+            this.scope.addDeleteFlagForAseaResource({
+              type: AseaResourceType.EC2_SECURITY_GROUP,
+              identifier: epSecurityGroupName,
+              logicalId: epSecurityGroup?.logicalResourceId,
+            });
+          }
+
+          // remove route53 hosted zone for endpoint
+          let hostedZoneName = this.getHostedZoneNameForService(configEndpointName, this.stackInfo.region);
+          if (!hostedZoneName.endsWith('.')) {
+            hostedZoneName += '.';
+          }
+          const hostedZoneCfnName = this.getCfnHostedZoneName(hostedZoneName);
+
+          const hostedZoneCfn = this.findResourceByName(existingHostedZoneResources, 'Name', hostedZoneCfnName);
+          if (!hostedZoneCfn) {
+            continue;
+          }
+
+          // route53 hosted zone
+          this.scope.addDeleteFlagForAseaResource({
+            type: RESOURCE_TYPE.HOSTED_ZONE,
+            identifier: hostedZoneCfnName,
+            logicalId: hostedZoneCfn.logicalResourceId,
+          });
+
+          const ssmResourcePhz = this.scope.importStackResources.getSSMParameterByName(
+            this.scope.getSsmPath(SsmResourceType.PHZ_ID, [vpcItem.name, configEndpointName]),
+          );
+          if (ssmResourcePhz) {
+            ssmResourcePhz.isDeleted = true;
+          }
+
+          // route53 recordset
+          const recordSetName = this.getRecordSetName(hostedZoneName);
+          const recordSetCfn = this.findResourceByName(existingRecordSetResources, 'Name', recordSetName);
+          if (recordSetCfn) {
+            this.scope.addDeleteFlagForAseaResource({
+              type: RESOURCE_TYPE.RECORD_SET,
+              identifier: recordSetName,
+              logicalId: recordSetCfn.logicalResourceId,
+            });
+          }
+
+          const ssmResourceDns = this.scope.importStackResources.getSSMParameterByName(
+            this.scope.getSsmPath(SsmResourceType.ENDPOINT_DNS, [vpcItem.name, configEndpointName]),
+          );
+          if (ssmResourceDns) {
+            ssmResourceDns.isDeleted = true;
+          }
+
+          const ssmResourceEndpointZone = this.scope.importStackResources.getSSMParameterByName(
+            this.scope.getSsmPath(SsmResourceType.ENDPOINT_ZONE_ID, [vpcItem.name, configEndpointName]),
+          );
+          if (ssmResourceEndpointZone) {
+            ssmResourceEndpointZone.isDeleted = true;
+          }
+
+          continue;
+        }
+      }
+
+      // updating existing configured endpoints
       for (const endpointItem of vpcItem.interfaceEndpoints?.endpoints ?? []) {
         const endpointCfn = this.findResourceByName(
           existingVpcEndpointResources,
@@ -64,7 +165,7 @@ export class VpcEndpoints extends AseaResource {
           stringValue: endpointCfn.physicalResourceId,
         });
         this.scope.addAseaResource(AseaResourceType.VPC_ENDPOINT, `${vpcItem.name}/${endpointItem.service}`);
-        let hostedZoneName = HostedZone.getHostedZoneNameForService(endpointItem.service, this.stackInfo.region);
+        let hostedZoneName = this.getHostedZoneNameForService(endpointItem.service, this.stackInfo.region);
         if (!hostedZoneName.endsWith('.')) {
           hostedZoneName += '.';
         }
@@ -144,6 +245,13 @@ export class VpcEndpoints extends AseaResource {
     return `com.amazonaws.${this.stackInfo.region}.${name}`;
   }
 
+  private interfaceVpcEndpointConfigNameFromServiceName(name: string): string {
+    if (name.startsWith('aws.sagemaker')) {
+      return 'notebook';
+    }
+    return name.split(/[.]+/).pop() ?? '';
+  }
+
   private getCfnHostedZoneName(hostedZoneName: string): string {
     const hostedZoneNameArr = hostedZoneName.split('.');
     const hostedZonePrefix = hostedZoneNameArr.shift();
@@ -157,6 +265,9 @@ export class VpcEndpoints extends AseaResource {
         break;
       case 'ecs-a':
         hostedZoneNameArr.unshift('ecs-agent');
+        break;
+      case 'sms-voice':
+        hostedZoneNameArr.unshift('pinpoint-sms-voice-v2');
         break;
       default:
         hostedZoneNameArr.unshift(hostedZonePrefix);
@@ -183,9 +294,74 @@ export class VpcEndpoints extends AseaResource {
       case 'ecs-t':
         hostedZoneNameArr.unshift('ecs-telemetry');
         break;
+      case 'sms-voice':
+        hostedZoneNameArr.unshift('pinpoint-sms-voice-v2');
+        break;
       default:
         hostedZoneNameArr.unshift(hostedZonePrefix);
     }
     return hostedZoneNameArr.join('.');
+  }
+
+  // This code needs to be maintained separately from the hosted zone class due to compatibility issues with ca-central-1
+  private getHostedZoneNameForService(service: string, region: string): string {
+    let hostedZoneName = `${service}.${region}.amazonaws.com`;
+
+    if (service.indexOf('.') > 0 && !this.ignoreServiceEndpoint(service)) {
+      const tmp = service.split('.').reverse().join('.');
+      hostedZoneName = `${tmp}.${region}.amazonaws.com.`;
+    }
+    switch (service) {
+      case 'appstream.api':
+        hostedZoneName = `appstream2.${region}.amazonaws.com`;
+        break;
+      case 'deviceadvisor.iot':
+        hostedZoneName = `deviceadvisor.iot.${region}.amazonaws.com`;
+        break;
+      case 'pinpoint-sms-voice-v2':
+        hostedZoneName = `sms-voice.${region}.amazonaws.com`;
+        break;
+      case 'rum-dataplane':
+        hostedZoneName = `dataplane.rum.${region}.amazonaws.com`;
+        break;
+      case 's3-global.accesspoint':
+        hostedZoneName = `${service}.amazonaws.com`;
+        break;
+      case 'ecs-agent':
+        hostedZoneName = `ecs-a.${region}.amazonaws.com`;
+        break;
+      case 'ecs-telemetry':
+        hostedZoneName = `ecs-t.${region}.amazonaws.com`;
+        break;
+      case 'codeartifact.api':
+        hostedZoneName = `codeartifact.${region}.amazonaws.com`;
+        break;
+      case 'codeartifact.repositories':
+        hostedZoneName = `d.codeartifact.${region}.amazonaws.com`;
+        break;
+      case 'notebook':
+        hostedZoneName = `${service}.${region}.sagemaker.aws`;
+        break;
+      case 'studio':
+        hostedZoneName = `${service}.${region}.sagemaker.aws`;
+        break;
+    }
+    return hostedZoneName;
+  }
+
+  private ignoreServiceEndpoint(service: string): boolean {
+    const ignoreServicesArray = [
+      'appstream.api',
+      'deviceadvisor.iot',
+      'rum-dataplane',
+      's3-global.accesspoint',
+      'ecs-agent',
+      'ecs-telemetry',
+      'notebook',
+      'studio',
+      'codeartifact.api',
+      'codeartifact.repositories',
+    ];
+    return ignoreServicesArray.includes(service);
   }
 }

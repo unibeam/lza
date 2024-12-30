@@ -49,7 +49,7 @@ import {
   VpnConnectionConfig,
   isNetworkType,
 } from '@aws-accelerator/config';
-import { ShareTargets } from '@aws-accelerator/config/dist/lib/common/types';
+import { ShareTargets } from '@aws-accelerator/config';
 import {
   ActiveDirectory,
   ActiveDirectoryConfiguration,
@@ -661,6 +661,10 @@ export class NetworkAssociationsStack extends NetworkStack {
     targetGroupItem: TargetGroupItemConfig,
     targetGroupMap: Map<string, TargetGroup>,
   ): void {
+    if (this.isManagedByAsea(AseaResourceType.EC2_TARGET_GROUP, `${targetGroupItem.name}`)) {
+      this.logger.info(`Target Group ${targetGroupItem.name} is managed externally.`);
+      return;
+    }
     if (targetGroupItem.type === 'ip') {
       const targetGroup = this.createIpTargetGroup(targetGroupItem, vpcItem, vpcId);
       targetGroupMap.set(`${vpcItem.name}-${targetGroupItem.name}`, targetGroup);

@@ -20,7 +20,7 @@ import {
   VpcTemplatesConfig,
   VpcPeeringConfig,
 } from '@aws-accelerator/config';
-import { VpcFlowLogsConfig } from '@aws-accelerator/config/dist/lib/common/types';
+import { VpcFlowLogsConfig } from '@aws-accelerator/config';
 import {
   DeleteDefaultSecurityGroupRules,
   DeleteDefaultVpc,
@@ -60,7 +60,13 @@ export class VpcResources {
     ipamPoolMap: Map<string, string>,
     dhcpOptionsIds: Map<string, string>,
     vpcResources: (VpcConfig | VpcTemplatesConfig)[],
-    acceleratorData: { acceleratorPrefix: string; ssmParamName: string; partition: string; useExistingRoles: boolean },
+    acceleratorData: {
+      acceleratorPrefix: string;
+      managementAccountAccessRole: string;
+      ssmParamName: string;
+      partition: string;
+      useExistingRoles: boolean;
+    },
     configData: {
       defaultVpcsConfig: DefaultVpcsConfig;
       centralEndpointVpc: VpcConfig | undefined;
@@ -96,6 +102,7 @@ export class VpcResources {
     this.createCrossAccountRouteRole(
       configData.vpcPeeringConfigs,
       acceleratorData.acceleratorPrefix,
+      acceleratorData.managementAccountAccessRole,
       acceleratorData.ssmParamName,
       configData.firewalls,
     );
@@ -261,6 +268,7 @@ export class VpcResources {
   private createCrossAccountRouteRole(
     vpcPeeringConfig: VpcPeeringConfig[] | undefined,
     acceleratorPrefix: string,
+    managementAccountAccessRole: string,
     ssmParamNamePrefix: string,
     firewallInfo: { accountId: string; firewallVpc: VpcConfig | VpcTemplatesConfig }[],
   ): cdk.aws_iam.Role | undefined {
@@ -282,10 +290,20 @@ export class VpcResources {
       for (const accountId of accountIdSet) {
         principals.push(new cdk.aws_iam.AccountPrincipal(accountId));
       }
-
+      const roleArns = [
+        `arn:${cdk.Stack.of(this.stack).partition}:iam::*:role/${this.stack.acceleratorPrefix}*`,
+        `arn:${cdk.Stack.of(this.stack).partition}:iam::*:role/${managementAccountAccessRole}`,
+      ];
       const role = new cdk.aws_iam.Role(this.stack, 'VpcPeeringRole', {
         roleName: `${acceleratorPrefix}-VpcPeeringRole-${cdk.Stack.of(this.stack).region}`,
-        assumedBy: new cdk.aws_iam.CompositePrincipal(...principals),
+        assumedBy: new cdk.aws_iam.PrincipalWithConditions(new cdk.aws_iam.CompositePrincipal(...principals), {
+          ArnLike: {
+            'aws:PrincipalArn': roleArns,
+          },
+          StringEquals: {
+            'aws:PrincipalOrgID': this.stack.organizationId,
+          },
+        }),
         inlinePolicies: {
           default: new cdk.aws_iam.PolicyDocument({
             statements: policyList,
@@ -317,7 +335,7 @@ export class VpcResources {
 
     for (const firewallItem of firewallInfo) {
       if (this.isFirewallOwnedByDifferentAccount(firewallItem)) {
-        crossAccountEniAccountIds.push(...firewallItem.accountId);
+        crossAccountEniAccountIds.push(firewallItem.accountId);
       }
     }
     // firewalls can be deployed in same account across regions so removing duplicates.
@@ -332,7 +350,6 @@ export class VpcResources {
 
     // Firewall can be deployed to same account but different region
     // Check that the firewall's target VPC is deployed in this account
-
     return firewallItem.accountId !== this.stack.account && this.vpcMap.has(firewallItem.firewallVpc.name);
   }
 

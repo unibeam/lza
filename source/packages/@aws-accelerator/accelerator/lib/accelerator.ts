@@ -43,7 +43,6 @@ import {
   getGlobalRegion,
   getCurrentAccountId,
 } from '@aws-accelerator/utils/lib/common-functions';
-import { setStsTokenPreferences } from '@aws-accelerator/utils/lib/set-token-preferences';
 
 import { AssumeProfilePlugin } from '@aws-cdk-extensions/cdk-plugin-assume-role';
 import { isBeforeBootstrapStage, writeImportResources } from '../utils/app-utils';
@@ -52,6 +51,7 @@ import { AcceleratorToolkit, AcceleratorToolkitProps } from './toolkit';
 import { v4 as uuidv4 } from 'uuid';
 import { getReplacementsConfig } from '../utils/app-utils';
 import * as path from 'path';
+import { Regions } from '@aws-accelerator/utils/lib/regions';
 
 export type CustomStackRunOrder = {
   /**
@@ -93,7 +93,7 @@ process.on('uncaughtException', err => {
   throw new Error('Synthesis failed');
 });
 
-export const BootstrapVersion = 20;
+export const BootstrapVersion = 21;
 
 //
 // The accelerator stack prefix value
@@ -275,6 +275,7 @@ export abstract class Accelerator {
       //
       const accountsConfig = AccountsConfig.load(props.configDirPath);
       const organizationsConfig = OrganizationConfig.load(props.configDirPath);
+      const homeRegion = GlobalConfig.loadRawGlobalConfig(props.configDirPath).homeRegion;
       await accountsConfig.loadAccountIds(
         props.partition,
         props.enableSingleAccountMode,
@@ -282,6 +283,7 @@ export abstract class Accelerator {
         accountsConfig,
       );
       const replacementsConfig = getReplacementsConfig(props.configDirPath, accountsConfig);
+      replacementsConfig.loadReplacementValues({ region: homeRegion }, organizationsConfig.enable);
 
       //
       // Set details about mandatory accounts
@@ -344,6 +346,16 @@ export abstract class Accelerator {
         regionDetails,
         maxStacks,
       );
+
+      let enabledRegions = globalConfig.enabledRegions;
+
+      if (props.region) {
+        if (!Regions.includes(props.region)) {
+          throw Error(`Provided region: ${props.region} is not a valid aws region.`);
+        }
+
+        enabledRegions = [props.region as Region];
+      }
       //
       // Execute all remaining stages
       //
@@ -352,7 +364,7 @@ export abstract class Accelerator {
         promises,
         accountsConfig,
         managementAccountDetails,
-        globalConfig.enabledRegions,
+        enabledRegions,
         maxStacks,
         replacementsConfig,
       );
@@ -447,7 +459,8 @@ export abstract class Accelerator {
 
   private static isSingleStackAction(props: AcceleratorProps) {
     return (
-      props.account || props.region || [Command.SYNTH.toString(), Command.SYNTHESIZE.toString()].includes(props.command)
+      (props.account && props.region) ||
+      [Command.SYNTH.toString(), Command.SYNTHESIZE.toString()].includes(props.command)
     );
   }
 
@@ -561,72 +574,53 @@ export abstract class Accelerator {
     globalConfig: GlobalConfig,
     managementAccountDetails: { id: string; name: string },
   ): Promise<void> {
+    const partition = toolkitProps.partition;
+    const managementAccountAccessRole = globalConfig.managementAccountAccessRole;
+    const centralizedBuckets = globalConfig.centralizeCdkBuckets?.enable || globalConfig.cdkOptions?.centralizeBuckets;
+    const homeRegion = globalConfig.homeRegion;
+    const customDeploymentRoleName = globalConfig.cdkOptions.customDeploymentRole;
+    const forceBootstrap = globalConfig.cdkOptions.forceBootstrap;
     const nonManagementAccounts = accountsConfig
       .getAccounts(toolkitProps.enableSingleAccountMode)
       .filter(accountItem => accountItem.name !== managementAccountDetails.name);
+    const bootstrapRequiredPromises = [];
 
     for (const region of globalConfig.enabledRegions) {
       for (const account of nonManagementAccounts) {
         const accountId = accountsConfig.getAccountId(account.name);
-        // Add bootstrap promises
-        await this.addAccountBootstrapPromise(
-          toolkitProps,
-          promises,
-          globalConfig,
-          accountId,
-          region,
-          managementAccountDetails.id,
+        bootstrapRequiredPromises.push(
+          bootstrapRequired({
+            accountId,
+            region,
+            partition,
+            managementAccountAccessRole,
+            centralizedBuckets,
+            homeRegion,
+            customDeploymentRoleName,
+            forceBootstrap,
+          }),
         );
-
-        if (promises.length >= 100) {
-          await Promise.all(promises);
-          promises.length = 0;
-        }
       }
     }
-    await Promise.all(promises);
-  }
-
-  /**
-   * Add a bootstrap promise to the promises array if the account needs bootstrapping
-   * @param toolkitProps
-   * @param promises
-   * @param globalConfig
-   * @param accountId
-   * @param region
-   * @param managementAccountId
-   */
-  private static async addAccountBootstrapPromise(
-    toolkitProps: AcceleratorToolkitProps,
-    promises: Promise<void>[],
-    globalConfig: GlobalConfig,
-    accountId: string,
-    region: string,
-    managementAccountId: string,
-  ): Promise<void> {
-    const needsBootstrapping = await bootstrapRequired({
-      accountId,
-      region,
-      partition: toolkitProps.partition,
-      managementAccountAccessRole: globalConfig.managementAccountAccessRole,
-      centralizedBuckets: globalConfig.centralizeCdkBuckets?.enable || globalConfig.cdkOptions?.centralizeBuckets,
-      homeRegion: globalConfig.homeRegion,
-      customDeploymentRoleName: globalConfig.cdkOptions?.customDeploymentRole,
-      force: globalConfig.cdkOptions?.forceBootstrap,
-    });
-    if (needsBootstrapping) {
+    const bootstrapRequiredResults = await Promise.all(bootstrapRequiredPromises);
+    const environmentsToBootstrap = bootstrapRequiredResults.filter(bootstrapInfo => bootstrapInfo.forceBootstrap);
+    for (const env of environmentsToBootstrap) {
       await delay(500);
-
       promises.push(
         AcceleratorToolkit.execute({
-          accountId,
-          region,
-          trustedAccountId: managementAccountId,
+          accountId: env.accountId,
+          region: env.region,
+          trustedAccountId: managementAccountDetails.id,
           ...toolkitProps,
           stage: 'bootstrap',
         }),
       );
+      if (promises.length > 100) {
+        await Promise.all(promises);
+        promises.length = 0;
+      }
     }
+    await Promise.all(promises);
   }
 
   /**
@@ -770,14 +764,6 @@ export abstract class Accelerator {
         regionDetails.enabledRegions,
         maxStacks,
       );
-
-      //
-      // Set STS token to version 2 in home region of every account
-      // STS token is vended in homeRegion and queried at globalRegion to ensure v1Token can be used
-      if (toolkitProps.region === regionDetails.homeRegion) {
-        logger.info(`Setting STS token preferences for ${toolkitProps.accountId} in region ${toolkitProps.region}`);
-        await setStsTokenPreferences(toolkitProps.accountId!, regionDetails.globalRegion);
-      }
     }
   }
 
@@ -929,7 +915,7 @@ export abstract class Accelerator {
       // get accounts where custom stack is deployed to
       const deploymentAccts = accountsConfig.getAccountIdsFromDeploymentTarget(stack.deploymentTargets);
       // get regions where custom stack is deployed to
-      const deploymentRegions = stack.regions.map(a => a.toString());
+      const deploymentRegions = stack.regions.map(a => a.toString()).filter(r => enabledRegions.includes(r));
       customizationsStackRunOrderData.push({
         stackName: stack.name,
         runOrder: stack.runOrder,
@@ -1210,23 +1196,24 @@ async function bootstrapRequired(props: {
   centralizedBuckets: boolean;
   homeRegion: string;
   customDeploymentRoleName?: string;
-  force?: boolean;
-}): Promise<boolean> {
+  forceBootstrap?: boolean;
+}): Promise<{ accountId: string; region: string; forceBootstrap: boolean }> {
+  const bootstrapInfo = { accountId: props.accountId, region: props.region, forceBootstrap: true };
   const crossAccountCredentials = await getCrossAccountCredentials(
     props.accountId,
     props.region,
     props.partition,
     props.managementAccountAccessRole,
   );
-  if (props.force) {
-    return true;
+  if (props.forceBootstrap) {
+    return bootstrapInfo;
   }
   if (!props.centralizedBuckets) {
     logger.info(`Checking if workload account CDK asset bucket exists in account ${props.accountId}`);
     const s3Client = getCrossAccountClient(props.region, crossAccountCredentials, 'S3') as S3Client;
     const assetBucketExists = await doesCdkAssetBucketExist(s3Client, props.accountId, props.region);
     if (!assetBucketExists) {
-      return true;
+      return bootstrapInfo;
     }
   }
 
@@ -1241,7 +1228,7 @@ async function bootstrapRequired(props: {
       props.region,
     );
     if (!deploymentRoleExists) {
-      return true;
+      return bootstrapInfo;
     }
   }
   const bootstrapVersionName = ' /cdk-bootstrap/accel/version';
@@ -1249,10 +1236,11 @@ async function bootstrapRequired(props: {
   const bootstrapVersionValue = await getSsmParameterValue(bootstrapVersionName, ssmClient);
   if (bootstrapVersionValue && Number(bootstrapVersionValue) >= BootstrapVersion) {
     logger.info(`Skipping bootstrap for account-region: ${props.accountId}-${props.region}`);
-    return false;
+    bootstrapInfo.forceBootstrap = false;
+    return bootstrapInfo;
   }
 
-  return true;
+  return bootstrapInfo;
 }
 
 async function doesCdkAssetBucketExist(s3Client: S3Client, accountId: string, region: string) {

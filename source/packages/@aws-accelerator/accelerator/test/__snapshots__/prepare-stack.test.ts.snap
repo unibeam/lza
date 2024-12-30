@@ -183,17 +183,7 @@ exports[`PrepareStack Construct(PrepareStack):  Snapshot Test 1`] = `
               },
               "Effect": "Allow",
               "Principal": {
-                "Service": {
-                  "Fn::Join": [
-                    "",
-                    [
-                      "logs.us-east-1.",
-                      {
-                        "Ref": "AWS::URLSuffix",
-                      },
-                    ],
-                  ],
-                },
+                "Service": "logs.us-east-1.amazonaws.com",
               },
               "Resource": "*",
               "Sid": "Allow Cloudwatch logs to use the encryption key",
@@ -1911,7 +1901,7 @@ exports[`PrepareStack Construct(PrepareStack):  Snapshot Test 1`] = `
               "Action": "sts:AssumeRole",
               "Effect": "Allow",
               "Principal": {
-                "Service": "states.us-east-1.amazonaws.com",
+                "Service": "states.amazonaws.com",
               },
             },
           ],
@@ -3507,7 +3497,7 @@ exports[`PrepareStack Construct(PrepareStack):  Snapshot Test 1`] = `
               "Action": "sts:AssumeRole",
               "Effect": "Allow",
               "Principal": {
-                "Service": "states.us-east-1.amazonaws.com",
+                "Service": "states.amazonaws.com",
               },
             },
           ],
@@ -4319,7 +4309,7 @@ exports[`PrepareStack Construct(PrepareStack):  Snapshot Test 1`] = `
         "isOrgsEnabled": true,
         "logArchiveAccountEmail": "all-enabled-logarchive-account@example.com",
         "managementAccountEmail": "all-enabled-management-account@example.com",
-        "organizationsConfigS3Key": "fb76e9a61d7ab20c202744a5728b5278772fff1f6056a6f7b6d8a16bb7fce9f9.yaml",
+        "organizationsConfigS3Key": "424303e536ae2b4ba5e2dbe75b69a0bbfb9c54a18133b94c07d3856114de2c30.yaml",
         "partition": "aws",
         "replacementsConfigS3Key": "e075bcecb878a10a77f0f4650b85c3ab1692fabf90da3e07131fc7006192385f.yaml",
         "stackName": "AWSAccelerator-PrepareStack-111111111111-us-east-1",
@@ -4413,17 +4403,7 @@ exports[`PrepareStack Construct(PrepareStack):  Snapshot Test 1`] = `
               },
               "Effect": "Allow",
               "Principal": {
-                "Service": {
-                  "Fn::Join": [
-                    "",
-                    [
-                      "logs.us-east-1.",
-                      {
-                        "Ref": "AWS::URLSuffix",
-                      },
-                    ],
-                  ],
-                },
+                "Service": "logs.us-east-1.amazonaws.com",
               },
               "Resource": "*",
               "Sid": "Allow Cloudwatch logs to use the encryption key",
@@ -4615,7 +4595,61 @@ exports[`PrepareStack Construct(PrepareStack):  Snapshot Test 1`] = `
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-PrepareStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.9.2",
+        "Value": "1.11.0",
+      },
+      "Type": "AWS::SSM::Parameter",
+    },
+    "SsmParamNetworkVpcNetworkInspectionDeployedCidrs81BCF58C": {
+      "DependsOn": [
+        "ValidateEnvironmentConfigCustomValidateEnvironmentConfigurationframeworkonEvent4F574CF7",
+        "ValidateEnvironmentConfigCustomValidateEnvironmentConfigurationframeworkonEventServiceRoleDefaultPolicyA669E020",
+        "ValidateEnvironmentConfigCustomValidateEnvironmentConfigurationframeworkonEventServiceRole675155BD",
+        "ValidateEnvironmentConfigValidateEnvironmentFunction13F94F77",
+        "ValidateEnvironmentConfigValidateEnvironmentFunctionServiceRoleDefaultPolicy9ACA86A8",
+        "ValidateEnvironmentConfigValidateEnvironmentFunctionServiceRole09865D4C",
+        "ValidateEnvironmentConfigValidateEnvironmentFunctionLogGroup632317CC",
+        "ValidateEnvironmentConfigValidateEnvironmentResourceD10DC179",
+      ],
+      "Properties": {
+        "Name": "/accelerator/validation/Network/network/vpc/Network-Inspection/deployedCidrs",
+        "Type": "String",
+        "Value": "10.2.0.0/22,10.3.0.0/16",
+      },
+      "Type": "AWS::SSM::Parameter",
+    },
+    "SsmParamSharedServicesVpcSharedServicesAppVpcDeployedCidrs7BF2BF03": {
+      "DependsOn": [
+        "ValidateEnvironmentConfigCustomValidateEnvironmentConfigurationframeworkonEvent4F574CF7",
+        "ValidateEnvironmentConfigCustomValidateEnvironmentConfigurationframeworkonEventServiceRoleDefaultPolicyA669E020",
+        "ValidateEnvironmentConfigCustomValidateEnvironmentConfigurationframeworkonEventServiceRole675155BD",
+        "ValidateEnvironmentConfigValidateEnvironmentFunction13F94F77",
+        "ValidateEnvironmentConfigValidateEnvironmentFunctionServiceRoleDefaultPolicy9ACA86A8",
+        "ValidateEnvironmentConfigValidateEnvironmentFunctionServiceRole09865D4C",
+        "ValidateEnvironmentConfigValidateEnvironmentFunctionLogGroup632317CC",
+        "ValidateEnvironmentConfigValidateEnvironmentResourceD10DC179",
+      ],
+      "Properties": {
+        "Name": "/accelerator/validation/SharedServices/network/vpc/SharedServices-appVpc/deployedCidrs",
+        "Type": "String",
+        "Value": "10.1.0.0/16",
+      },
+      "Type": "AWS::SSM::Parameter",
+    },
+    "SsmParamSharedServicesVpcSharedServicesMainDeployedCidrs0F5DC317": {
+      "DependsOn": [
+        "ValidateEnvironmentConfigCustomValidateEnvironmentConfigurationframeworkonEvent4F574CF7",
+        "ValidateEnvironmentConfigCustomValidateEnvironmentConfigurationframeworkonEventServiceRoleDefaultPolicyA669E020",
+        "ValidateEnvironmentConfigCustomValidateEnvironmentConfigurationframeworkonEventServiceRole675155BD",
+        "ValidateEnvironmentConfigValidateEnvironmentFunction13F94F77",
+        "ValidateEnvironmentConfigValidateEnvironmentFunctionServiceRoleDefaultPolicy9ACA86A8",
+        "ValidateEnvironmentConfigValidateEnvironmentFunctionServiceRole09865D4C",
+        "ValidateEnvironmentConfigValidateEnvironmentFunctionLogGroup632317CC",
+        "ValidateEnvironmentConfigValidateEnvironmentResourceD10DC179",
+      ],
+      "Properties": {
+        "Name": "/accelerator/validation/SharedServices/network/vpc/SharedServices-Main/deployedCidrs",
+        "Type": "String",
+        "Value": "10.4.0.0/16",
       },
       "Type": "AWS::SSM::Parameter",
     },
@@ -4965,6 +4999,9 @@ exports[`PrepareStack Construct(PrepareStack):  Snapshot Test 1`] = `
                     ],
                   ],
                 },
+                "arn:aws:ssm:us-east-1:111111111111:parameter/accelerator/validation/Network/network/vpc/Network-Inspection/deployedCidrs",
+                "arn:aws:ssm:us-east-1:111111111111:parameter/accelerator/validation/SharedServices/network/vpc/SharedServices-Main/deployedCidrs",
+                "arn:aws:ssm:us-east-1:111111111111:parameter/accelerator/validation/SharedServices/network/vpc/SharedServices-appVpc/deployedCidrs",
               ],
               "Sid": "sms",
             },
@@ -5062,6 +5099,33 @@ exports[`PrepareStack Construct(PrepareStack):  Snapshot Test 1`] = `
         "skipScpValidation": "no",
         "stackName": "AWSAccelerator-PrepareStack-111111111111-us-east-1",
         "uuid": "REPLACED-UUID",
+        "vpcCidrs": [
+          {
+            "cidrs": [
+              "10.2.0.0/22",
+              "10.3.0.0/16",
+            ],
+            "logicalId": "SsmParamNetworkVpcNetworkInspectionDeployedCidrs",
+            "parameterName": "/accelerator/validation/Network/network/vpc/Network-Inspection/deployedCidrs",
+            "vpcName": "Network/Network-Inspection",
+          },
+          {
+            "cidrs": [
+              "10.4.0.0/16",
+            ],
+            "logicalId": "SsmParamSharedServicesVpcSharedServicesMainDeployedCidrs",
+            "parameterName": "/accelerator/validation/SharedServices/network/vpc/SharedServices-Main/deployedCidrs",
+            "vpcName": "SharedServices/SharedServices-Main",
+          },
+          {
+            "cidrs": [
+              "10.1.0.0/16",
+            ],
+            "logicalId": "SsmParamSharedServicesVpcSharedServicesAppVpcDeployedCidrs",
+            "parameterName": "/accelerator/validation/SharedServices/network/vpc/SharedServices-appVpc/deployedCidrs",
+            "vpcName": "SharedServices/SharedServices-appVpc",
+          },
+        ],
       },
       "Type": "Custom::ValidateEnvironmentConfiguration",
       "UpdateReplacePolicy": "Delete",

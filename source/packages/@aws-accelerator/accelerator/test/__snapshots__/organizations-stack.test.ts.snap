@@ -935,8 +935,8 @@ exports[`MultiOuOrganizationsStack Construct(OrganizationsStack):  Snapshot Test
                 },
                 {
                   "Action": [
-                    "GuardDuty:EnableOrganizationAdminAccount",
-                    "GuardDuty:ListOrganizationAdminAccounts",
+                    "guardduty:EnableOrganizationAdminAccount",
+                    "guardduty:ListOrganizationAdminAccounts",
                     "guardduty:DisableOrganizationAdminAccount",
                   ],
                   "Effect": "Allow",
@@ -1073,9 +1073,6 @@ exports[`MultiOuOrganizationsStack Construct(OrganizationsStack):  Snapshot Test
                     "macie2:EnableOrganizationAdminAccount",
                     "macie2:GetMacieSession",
                     "macie2:ListOrganizationAdminAccounts",
-                    "macie2:DisableOrganizationAdminAccount",
-                    "macie2:GetMacieSession",
-                    "macie2:EnableMacie",
                   ],
                   "Effect": "Allow",
                   "Resource": "*",
@@ -3202,7 +3199,7 @@ exports[`MultiOuOrganizationsStack Construct(OrganizationsStack):  Snapshot Test
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-OrganizationsStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.9.2",
+        "Value": "1.11.0",
       },
       "Type": "AWS::SSM::Parameter",
     },
@@ -3388,6 +3385,65 @@ exports[`OrganizationsStack Construct(OrganizationsStack):  Snapshot Test 1`] = 
       "Type": "Custom::AttachPolicy",
       "UpdateReplacePolicy": "Delete",
     },
+    "AttachCbpChatbotPolicyInfrastructureB6DACE71": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "ChatbotPolicy5FDA677A",
+        "CustomOrganizationsAttachPolicyCustomResourceProviderLogGroup03FEC039",
+      ],
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CustomOrganizationsAttachPolicyCustomResourceProviderHandlerB3233202",
+            "Arn",
+          ],
+        },
+        "configPolicyNames": [
+          "AcceleratorGuardrails1",
+          "DataPerimeter",
+        ],
+        "partition": {
+          "Ref": "AWS::Partition",
+        },
+        "policyId": {
+          "Ref": "ChatbotPolicy5FDA677A",
+        },
+        "policyTagKey": "AWSAcceleratorManaged",
+        "targetId": "ou-asdf-22222222",
+        "type": "CHATBOT_POLICY",
+        "uuid": "REPLACED-MD5",
+      },
+      "Type": "Custom::AttachPolicy",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "AttachCbpChatbotPolicySecurity4F5DC1ED": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "ChatbotPolicy5FDA677A",
+        "CustomOrganizationsAttachPolicyCustomResourceProviderLogGroup03FEC039",
+      ],
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CustomOrganizationsAttachPolicyCustomResourceProviderHandlerB3233202",
+            "Arn",
+          ],
+        },
+        "configPolicyNames": [],
+        "partition": {
+          "Ref": "AWS::Partition",
+        },
+        "policyId": {
+          "Ref": "ChatbotPolicy5FDA677A",
+        },
+        "policyTagKey": "AWSAcceleratorManaged",
+        "targetId": "ou-asdf-11111111",
+        "type": "CHATBOT_POLICY",
+        "uuid": "REPLACED-MD5",
+      },
+      "Type": "Custom::AttachPolicy",
+      "UpdateReplacePolicy": "Delete",
+    },
     "AttachTagPolicy01RootD3F4B8AF": {
       "DeletionPolicy": "Delete",
       "DependsOn": [
@@ -3466,15 +3522,40 @@ exports[`OrganizationsStack Construct(OrganizationsStack):  Snapshot Test 1`] = 
       "UpdateReplacePolicy": "Delete",
     },
     "AwsGrEbsOptimizedInstanceSecureWorkloads": {
+      "DependsOn": [
+        "AwsGrRestrictRootUserAccessKeysSecureWorkloads",
+      ],
       "Properties": {
-        "ControlIdentifier": "arn:aws:controltower:us-east-1::control/AWS-GR_EBS_OPTIMIZED_INSTANCE",
+        "ControlIdentifier": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition",
+              },
+              ":controltower:us-east-1::control/AWS-GR_EBS_OPTIMIZED_INSTANCE",
+            ],
+          ],
+        },
         "TargetIdentifier": "arn:aws:organizations::111111111111:ou/o-asdf123456/ou-asdf-33333333",
       },
       "Type": "AWS::ControlTower::EnabledControl",
     },
     "AwsGrRestrictRootUserAccessKeysSecureWorkloads": {
       "Properties": {
-        "ControlIdentifier": "arn:aws:controltower:us-east-1::control/AWS-GR_RESTRICT_ROOT_USER_ACCESS_KEYS",
+        "ControlIdentifier": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition",
+              },
+              ":controltower:us-east-1::control/AWS-GR_RESTRICT_ROOT_USER_ACCESS_KEYS",
+            ],
+          ],
+        },
         "TargetIdentifier": "arn:aws:organizations::111111111111:ou/o-asdf123456/ou-asdf-33333333",
       },
       "Type": "AWS::ControlTower::EnabledControl",
@@ -3524,6 +3605,31 @@ exports[`OrganizationsStack Construct(OrganizationsStack):  Snapshot Test 1`] = 
         "partition": "aws",
         "policyTagKey": "AWSAcceleratorManaged",
         "type": "BACKUP_POLICY",
+        "uuid": "REPLACED-MD5",
+      },
+      "Type": "Custom::CreatePolicy",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "ChatbotPolicy5FDA677A": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "CustomOrganizationsCreatePolicyCustomResourceProviderLogGroup019B74A9",
+        "enablePolicyTypeChatbotFE7C7953",
+      ],
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CustomOrganizationsCreatePolicyCustomResourceProviderHandler7A188619",
+            "Arn",
+          ],
+        },
+        "bucket": "cdk-hnb659fds-assets-111111111111-us-east-1",
+        "description": "Organization Chatbot Policy",
+        "key": "REPLACED-JSON-PATH.json",
+        "name": "ChatbotPolicy",
+        "partition": "aws",
+        "policyTagKey": "AWSAcceleratorManaged",
+        "type": "CHATBOT_POLICY",
         "uuid": "REPLACED-MD5",
       },
       "Type": "Custom::CreatePolicy",
@@ -4253,8 +4359,8 @@ exports[`OrganizationsStack Construct(OrganizationsStack):  Snapshot Test 1`] = 
                 },
                 {
                   "Action": [
-                    "GuardDuty:EnableOrganizationAdminAccount",
-                    "GuardDuty:ListOrganizationAdminAccounts",
+                    "guardduty:EnableOrganizationAdminAccount",
+                    "guardduty:ListOrganizationAdminAccounts",
                     "guardduty:DisableOrganizationAdminAccount",
                   ],
                   "Effect": "Allow",
@@ -4391,9 +4497,6 @@ exports[`OrganizationsStack Construct(OrganizationsStack):  Snapshot Test 1`] = 
                     "macie2:EnableOrganizationAdminAccount",
                     "macie2:GetMacieSession",
                     "macie2:ListOrganizationAdminAccounts",
-                    "macie2:DisableOrganizationAdminAccount",
-                    "macie2:GetMacieSession",
-                    "macie2:EnableMacie",
                   ],
                   "Effect": "Allow",
                   "Resource": "*",
@@ -6572,7 +6675,7 @@ exports[`OrganizationsStack Construct(OrganizationsStack):  Snapshot Test 1`] = 
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-OrganizationsStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.9.2",
+        "Value": "1.11.0",
       },
       "Type": "AWS::SSM::Parameter",
     },
@@ -6652,6 +6755,26 @@ exports[`OrganizationsStack Construct(OrganizationsStack):  Snapshot Test 1`] = 
           "Ref": "AWS::Partition",
         },
         "policyType": "BACKUP_POLICY",
+      },
+      "Type": "Custom::EnablePolicyType",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "enablePolicyTypeChatbotFE7C7953": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "CustomEnablePolicyTypeCustomResourceProviderLogGroup81BE8EF5",
+      ],
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CustomEnablePolicyTypeCustomResourceProviderHandlerC244F9E1",
+            "Arn",
+          ],
+        },
+        "partition": {
+          "Ref": "AWS::Partition",
+        },
+        "policyType": "CHATBOT_POLICY",
       },
       "Type": "Custom::EnablePolicyType",
       "UpdateReplacePolicy": "Delete",
@@ -7553,8 +7676,8 @@ exports[`delegatedAdminStack Construct(OrganizationsStack):  Snapshot Test 1`] =
                 },
                 {
                   "Action": [
-                    "GuardDuty:EnableOrganizationAdminAccount",
-                    "GuardDuty:ListOrganizationAdminAccounts",
+                    "guardduty:EnableOrganizationAdminAccount",
+                    "guardduty:ListOrganizationAdminAccounts",
                     "guardduty:DisableOrganizationAdminAccount",
                   ],
                   "Effect": "Allow",
@@ -7691,9 +7814,6 @@ exports[`delegatedAdminStack Construct(OrganizationsStack):  Snapshot Test 1`] =
                     "macie2:EnableOrganizationAdminAccount",
                     "macie2:GetMacieSession",
                     "macie2:ListOrganizationAdminAccounts",
-                    "macie2:DisableOrganizationAdminAccount",
-                    "macie2:GetMacieSession",
-                    "macie2:EnableMacie",
                   ],
                   "Effect": "Allow",
                   "Resource": "*",
@@ -9846,7 +9966,7 @@ exports[`delegatedAdminStack Construct(OrganizationsStack):  Snapshot Test 1`] =
       "Properties": {
         "Name": "/accelerator/AWSAccelerator-OrganizationsStack-111111111111-us-east-1/version",
         "Type": "String",
-        "Value": "1.9.2",
+        "Value": "1.11.0",
       },
       "Type": "AWS::SSM::Parameter",
     },

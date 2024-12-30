@@ -41,10 +41,14 @@ type OrganizationConfigArray = {
 export async function loadOrganizationalUnits(
   partition: string,
   arrayFromConfig: OrganizationConfigArray[],
+  /**
+   * Management account credential when deployed from external account, otherwise this should remain undefined
+   */ managementAccountCredentials?: AWS.Credentials,
 ): Promise<AcceleratorOu[]> {
   const client = new OrganizationsClient({
     retryStrategy: setRetryStrategy(),
-    region: await getRegion(partition),
+    region: getRegion(partition),
+    credentials: managementAccountCredentials,
   });
   const acceleratorOrganizationalUnit: AcceleratorOu[] = [];
   const rootResults = await client.send(new ListRootsCommand({}));
@@ -77,12 +81,16 @@ export async function loadOrganizationalUnits(
   return filteredArray;
 }
 
-async function getRegion(partition: string): Promise<string> {
+function getRegion(partition: string): string {
   let region: string;
   if (partition === 'aws-us-gov') {
     region = 'us-gov-west-1';
   } else if (partition === 'aws-cn') {
     region = 'cn-northwest-1';
+  } else if (partition === 'aws-iso-f') {
+    region = 'us-isof-south-1';
+  } else if (partition === 'aws-iso-e') {
+    region = 'eu-isoe-west-1';
   } else {
     region = 'us-east-1';
   }

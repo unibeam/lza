@@ -658,6 +658,8 @@ export interface IAssetBucketConfig {
    * Policy statements from these files will be added to the bucket encryption key policy.
    * This property can not be used when customPolicyOverrides.kmsPolicy property has value.
    * When imported CentralLogs bucket used with createAcceleratorManagedKey set to false, this property can not have any value.
+   *
+   * Note: The Assets Bucket will allow customers to have SSE-S3 (Amazon S3 managed keys) or SSE-KMS keys. Only SSE-KMS keys can adopt the KMS resource policy files.
    */
   readonly kmsResourcePolicyAttachments?: t.IResourcePolicyStatement[];
   /**
@@ -673,6 +675,8 @@ export interface IAssetBucketConfig {
    *    applyAcceleratorManagedBucketPolicy: true
    *    createAcceleratorManagedKey: true
    * ```
+   * Note: When importing your own Assets S3 Bucket, be sure to create it in the `Management` account in the `home` region.
+   *
    *
    * @default
    * undefined
@@ -882,6 +886,8 @@ export interface ICentralLogBucketConfig {
    * Policy statements from these files will be added to the bucket encryption key policy.
    * This property can not be used when customPolicyOverrides.kmsPolicy property has value.
    * When imported CentralLogs bucket used with createAcceleratorManagedKey set to false, this property can not have any value.
+   *
+   * Note: The Central Logs Bucket will allow customers to have SSE-S3 (Amazon S3 managed keys) or SSE-KMS keys. Only SSE-KMS keys can adopt the KMS resource policy files.
    */
   readonly kmsResourcePolicyAttachments?: t.IResourcePolicyStatement[];
   /**
@@ -1015,6 +1021,7 @@ export interface IElbLogBucketConfig {
    * customPolicyOverrides:
    *   s3Policy: path/to/policy.json
    * ```
+   * Note: If importing your own ELB Log buckets, be sure to create the buckets in the `LogArchive` account and a bucket within each operating region that LZA is configured in.
    *
    * @default
    * undefined
@@ -1073,6 +1080,37 @@ export interface ICloudWatchLogsExclusionConfig {
    * Wild cards are supported. These log group names are added in the eventbridge payload which triggers lambda. If `excludeAll` is used then all logGroups are excluded and this parameter is not used.
    */
   readonly logGroupNames?: t.NonEmptyString[];
+}
+
+/**
+ * *{@link GlobalConfig} / {@link LoggingConfig} / {@link CloudWatchLogsConfig}/ {@link CloudWatchFirehoseConfig}*
+ *
+ * @description
+ * Accelerator global CloudWatch Logs firehose configuration
+ *
+ * @example
+ * ```
+ * logging:
+ *  - cloudwatchLogs:
+ *  - firehose:
+ *     - fileExtension: undefined | 'json.gz'
+ *
+ * ```
+ */
+export interface ICloudWatchFirehoseConfig {
+  /**
+   * Configuration that will be applicable for firehose delivery of logs in LogArchive
+   *
+   * @remarks
+   * If this property is undefined, firehose delivery will be store logs in MimeType as application/octet-stream
+   *
+   * @example
+   * ```
+   * - fileExtension: 'json.gz'
+   * ```
+   *
+   */
+  readonly fileExtension?: t.NonEmptyString;
 }
 
 /**
@@ -2021,6 +2059,47 @@ export interface ISsmParameterConfig {
 }
 
 /**
+ * *{@link GlobalConfig} / {@link defaultEventBusConfig}*
+ *
+ * @description
+ * Default Event Bus Configuration
+ *
+ * @example
+ * ```
+ * defaultEventBus:
+ *   applyDefaultEventBusPolicy: true
+ *   eventBusResourcePolicyAttachments:
+ *     - policy: path-to-my-policy
+ * ```
+ *
+ */
+export interface IDefaultEventBusConfig {
+  /**
+   * Apply the default Event Bus resource-based policy.
+   */
+  readonly applyDefaultEventBusPolicy?: boolean;
+  /**
+   * JSON policy files.
+   *
+   * @remarks
+   * Policy statements from these files will be applied to the default event bus policy. This will overwrite any existing policies in place.
+   *
+   * Note: Please be aware that overly restrictive custom policies may interfere with standard LZA operations.
+   * This property cannot be used in conjunction with the `applyDefaultEventBusPolicy` being set to `true`.
+   */
+  readonly customPolicyOverride?: t.ICustomEventBusResourcePolicyOverrideConfig | undefined;
+
+  /**
+   * Default Event Bus Policy deployment targets.
+   *
+   * @remarks
+   * With this configuration, LZA will deploy the LZA Managed or cust policy provided via the `customPolicyOverride` property to the
+   * default event bus resource-based policy for the respective account(s).
+   */
+  readonly deploymentTargets: t.IDeploymentTargets;
+}
+
+/**
  * Accelerator global configuration
  */
 export interface IGlobalConfig {
@@ -2368,4 +2447,30 @@ export interface IGlobalConfig {
    * ```
    */
   readonly s3?: IS3GlobalConfig;
+  /**
+   * Whether to automatically enable opt-in regions configured for all LZA managed accounts.
+   */
+  readonly enableOptInRegions?: boolean;
+  /**
+   * Configuration for the Default Event Bus
+   *
+   * When not providing this configuration, the default event bus policy is not provided by LZA.
+   * If the `applyDefaultEventBusPolicy` is set to `true`, LZA will create a default event bus policy
+   * that prevents publishing events as well as enabling and disabling rules on the default event bridge.
+   * If end-users provide a custom policy, via the `customPolicyOverrides` property, LZA will apply the
+   * custom policy to the default event bus policy, which will overwrite any existing policy.
+   *
+   * @example
+   * ```
+   * defaultEventBus:
+   *   applyDefaultEventBusPolicy: false
+   *   customPolicyOverrides:
+   *     - policy: path-to-my-policy.json
+   *   deploymentTargets:
+   *     accounts:
+   *       - Management
+   * }
+   * ```
+   */
+  readonly defaultEventBus?: IDefaultEventBusConfig;
 }

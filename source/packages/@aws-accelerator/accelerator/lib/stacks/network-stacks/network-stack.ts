@@ -74,6 +74,7 @@ import {
   processSecurityGroupSgIngressSources,
 } from './utils/security-group-utils';
 import { hasAdvancedVpnOptions, isIpv4 } from './utils/validation-utils';
+import { isArn } from '@aws-accelerator/utils/lib/is-arn';
 
 /**
  * Resource share type for RAM resource shares
@@ -572,7 +573,9 @@ export abstract class NetworkStack extends AcceleratorStack {
         // Get firewall policy ARN
         let policyArn: string;
 
-        if (delegatedAdminAccountId === cdk.Stack.of(this).account) {
+        if (isArn(firewallItem.firewallPolicy)) {
+          policyArn = firewallItem.firewallPolicy;
+        } else if (delegatedAdminAccountId === cdk.Stack.of(this).account) {
           policyArn = cdk.aws_ssm.StringParameter.valueForStringParameter(
             this,
             this.getSsmPath(SsmResourceType.NFW_POLICY, [firewallItem.firewallPolicy]),
@@ -892,6 +895,11 @@ export abstract class NetworkStack extends AcceleratorStack {
     securityGroupMap: Map<string, SecurityGroup>,
   ) {
     for (const securityGroupItem of vpcItem.securityGroups ?? []) {
+      // skip if managed by asea
+      if (this.isManagedByAsea(AseaResourceType.EC2_SECURITY_GROUP, `${vpcItem.name}/${securityGroupItem.name}`)) {
+        this.logger.info(`Skipping security group ${securityGroupItem.name} in VPC ${vpcItem.name}`);
+        continue;
+      }
       const securityGroup = getSecurityGroup(securityGroupMap, vpcItem.name, securityGroupItem.name) as SecurityGroup;
       const ingressRules = processSecurityGroupSgIngressSources(
         this.vpcResources,
@@ -1143,7 +1151,7 @@ export abstract class NetworkStack extends AcceleratorStack {
     //
     // Create event handler role
     const vpnRole = new cdk.aws_iam.Role(this, 'VpnRole', {
-      assumedBy: new cdk.aws_iam.ServicePrincipal(`lambda.${this.urlSuffix}`),
+      assumedBy: new cdk.aws_iam.ServicePrincipal(`lambda.amazonaws.com`),
       description: 'Landing Zone Accelerator site-to-site VPN custom resource access role',
       managedPolicies: [managedVpnPolicy, lambdaExecutionPolicy],
     });

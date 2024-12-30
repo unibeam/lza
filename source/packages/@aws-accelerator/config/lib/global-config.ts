@@ -406,6 +406,10 @@ export class CloudWatchLogsExclusionConfig implements i.ICloudWatchLogsExclusion
   readonly logGroupNames: string[] | undefined = undefined;
 }
 
+export class CloudWatchFirehoseConfig implements i.ICloudWatchFirehoseConfig {
+  readonly fileExtension: string | undefined = undefined;
+}
+
 export class CloudWatchLogsConfig implements i.ICloudWatchLogsConfig {
   readonly dynamicPartitioning: string | undefined = undefined;
   readonly enable: boolean | undefined = undefined;
@@ -413,6 +417,7 @@ export class CloudWatchLogsConfig implements i.ICloudWatchLogsConfig {
   readonly exclusions: CloudWatchLogsExclusionConfig[] | undefined = undefined;
   readonly replaceLogDestinationArn: string | undefined = undefined;
   readonly dataProtection: CloudWatchDataProtectionConfig | undefined = undefined;
+  readonly firehose: CloudWatchFirehoseConfig | undefined = undefined;
 }
 
 export class LoggingConfig implements i.ILoggingConfig {
@@ -517,6 +522,12 @@ export class SsmParametersConfig implements i.ISsmParametersConfig {
   readonly deploymentTargets: t.DeploymentTargets = new t.DeploymentTargets();
 }
 
+export class DefaultEventBusConfig implements i.IDefaultEventBusConfig {
+  readonly applyDefaultEventBusPolicy: boolean | undefined = undefined;
+  readonly customPolicyOverride: t.ICustomEventBusResourcePolicyOverrideConfig | undefined = undefined;
+  readonly deploymentTargets: t.DeploymentTargets = new t.DeploymentTargets();
+}
+
 export class SsmParameterConfig implements i.ISsmParameterConfig {
   readonly name = '';
   readonly path = '';
@@ -535,6 +546,7 @@ export class GlobalConfig implements i.IGlobalConfig {
   readonly centralizeCdkBuckets: centralizeCdkBucketsConfig | undefined = undefined;
   readonly cdkOptions = new cdkOptionsConfig();
   readonly terminationProtection = true;
+  readonly enableOptInRegions = false;
   readonly externalLandingZoneResources: externalLandingZoneResourcesConfig | undefined = undefined;
   readonly controlTower: ControlTowerConfig = new ControlTowerConfig();
   readonly logging: LoggingConfig = new LoggingConfig();
@@ -549,6 +561,7 @@ export class GlobalConfig implements i.IGlobalConfig {
   readonly acceleratorSettings: AcceleratorSettingsConfig | undefined = undefined;
   readonly lambda: LambdaConfig | undefined = undefined;
   readonly s3: S3GlobalConfig | undefined = undefined;
+  readonly defaultEventBus: DefaultEventBusConfig | undefined = undefined;
 
   /**
    * SSM IAM Role Parameters to be loaded for session manager policy attachments

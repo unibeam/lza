@@ -842,6 +842,10 @@
           "$ref": "#/definitions/NonEmptyString",
           "description": "AWS supports permissions boundaries for IAM entities (users or roles). A permissions boundary is an advanced feature for using a managed policy to set the maximum permissions that an identity-based policy can grant to an IAM entity. An entity's permissions boundary allows it to perform only the actions that are allowed by both its identity-based policies and its permissions boundaries.\n\nPermission boundary is derived from iam-policies/boundary-policy.json file in config repository"
         },
+        "disableConsoleAccess": {
+          "description": "A boolean value to define if the user should have access to the AWS console. True will disable console access, False will enable it. defaults to False.",
+          "type": "boolean"
+        },
         "group": {
           "$ref": "#/definitions/NonEmptyString",
           "description": "Group to add this user to."
@@ -905,6 +909,7 @@
         "ap-southeast-2",
         "ap-southeast-3",
         "ap-southeast-4",
+        "ap-southeast-5",
         "ca-central-1",
         "ca-west-1",
         "cn-north-1",
@@ -917,6 +922,7 @@
         "eu-west-1",
         "eu-west-2",
         "eu-west-3",
+        "eu-isoe-west-1",
         "il-central-1",
         "me-central-1",
         "me-south-1",
@@ -928,6 +934,8 @@
         "us-iso-east-1",
         "us-isob-east-1",
         "us-iso-west-1",
+        "us-isof-south-1",
+        "us-isof-east-1",
         "us-west-1",
         "us-west-2"
       ],

@@ -16,10 +16,13 @@ nav:
   - Developer Guide:
       - developer-guide/index.md
       - Development Dependencies: developer-guide/dependencies.md
+      - Package Dependencies: developer-guide/package-dependencies.generated.md
       - Command Line Interface and Package Scripts: developer-guide/scripts.md
       - Architecture and Design Philosophy: developer-guide/design.md
       - Feature Development: developer-guide/features.md
       - Documentation Guidelines: developer-guide/doc-guidelines.md
+      - JSON Schema: developer-guide/json-schema.md
+      - Module Development: developer-guide/module-development/index.md      
   - Sample Configurations:
       - sample-configurations/index.md
       - Standard:
@@ -90,7 +93,13 @@ nav:
           - v1.8.1: typedocs/v1.8.1/index.html
       - v1.9:
           - v1.9.0: typedocs/v1.9.0/index.html
-          - v1.9.1: typedocs/latest/index.html
+          - v1.9.1: typedocs/v1.9.1/index.html
+          - v1.9.2: typedocs/v1.9.2/index.html
+      - v1.10:
+          - v1.10.0: typedocs/v1.10.0/index.html
+          - v1.10.1: typedocs/v1.10.1/index.html
+      - v1.11:
+          - v1.11.0: typedocs/latest/index.html
 
 theme:
   name: material

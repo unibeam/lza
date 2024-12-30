@@ -29,9 +29,12 @@ async function main() {
 
   const useExternalPipelineAccount = app.node.tryGetContext('use-external-pipeline-account') === 'true';
   const enableTester = app.node.tryGetContext('enable-tester') === 'true';
+  const useS3Source = app.node.tryGetContext('use-s3-source') === 'true';
+  const s3SourceKmsKeyArn = app.node.tryGetContext('s3-source-kms-key-arn');
   const managementCrossAccountRoleName = app.node.tryGetContext('management-cross-account-role-name');
   const enableSingleAccountMode = app.node.tryGetContext('enable-single-account-mode') === 'true';
   const usePermissionBoundary = app.node.tryGetContext('use-permission-boundary') === 'true';
+  const enableRegionByRegionDeployment = app.node.tryGetContext('enable-region-by-region-deployment') === 'true';
 
   if (enableTester && managementCrossAccountRoleName === undefined) {
     console.log(`Invalid --management-cross-account-role-name ${managementCrossAccountRoleName}`);
@@ -47,9 +50,12 @@ async function main() {
     }),
     useExternalPipelineAccount: useExternalPipelineAccount,
     enableTester: enableTester,
+    useS3Source: useS3Source,
+    s3SourceKmsKeyArn: s3SourceKmsKeyArn,
     managementCrossAccountRoleName: managementCrossAccountRoleName,
     enableSingleAccountMode,
     usePermissionBoundary,
+    enableRegionByRegionDeployment,
   });
   if (usePermissionBoundary) {
     cdk.Aspects.of(app).add(new installerPermissionBoundary());

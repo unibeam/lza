@@ -26,12 +26,14 @@ import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-clo
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { throttlingBackOff } from '@aws-accelerator/utils/lib/throttle';
 import { CloudFormationCustomResourceEvent } from '@aws-accelerator/utils/lib/common-types';
+import { getGlobalRegion } from '@aws-accelerator/utils/lib/common-functions';
 
 type scpTargetType = 'ou' | 'account';
 
 type serviceControlPolicyType = {
   name: string;
   targetType: scpTargetType;
+  strategy: string;
   targets: { name: string; id: string }[];
 };
 
@@ -122,21 +124,19 @@ export async function handler(event: CloudFormationCustomResourceEvent): Promise
   driftDetectionParameterName = event.ResourceProperties['driftDetectionParameterName'];
   driftDetectionMessageParameterName = event.ResourceProperties['driftDetectionMessageParameterName'];
   const skipScpValidation = event.ResourceProperties['skipScpValidation'];
-
+  const vpcCidrs = event.ResourceProperties['vpcCidrs'];
   const solutionId = process.env['SOLUTION_ID'];
-
-  if (partition === 'aws-us-gov') {
-    organizationsClient = new AWS.Organizations({ region: 'us-gov-west-1' });
-  } else if (partition === 'aws-cn') {
-    organizationsClient = new AWS.Organizations({ region: 'cn-northwest-1' });
-  } else {
-    organizationsClient = new AWS.Organizations({ region: 'us-east-1', customUserAgent: solutionId });
-  }
-
   dynamodbClient = new DynamoDBClient({ customUserAgent: solutionId });
   documentClient = DynamoDBDocumentClient.from(dynamodbClient, translateConfig);
   serviceCatalogClient = new AWS.ServiceCatalog({ customUserAgent: solutionId });
   cloudformationClient = new CloudFormationClient({ customUserAgent: solutionId });
+  const globalRegion = getGlobalRegion(partition);
+  // Move to setOrganizationsClient method after refactoring to SDK v3
+  organizationsClient = new AWS.Organizations({
+    customUserAgent: solutionId,
+    region: globalRegion,
+  });
+
   ssmClient = new SSMClient({});
   paginationConfig = {
     client: documentClient,
@@ -178,6 +178,12 @@ export async function handler(event: CloudFormationCustomResourceEvent): Promise
         await validateControlTower();
       }
 
+      if (isCIDRConfigArray(vpcCidrs)) {
+        await validateCidrOrder(vpcCidrs, validationErrors);
+      } else {
+        console.log('No vpcCidrs provided', vpcCidrs);
+      }
+
       const allOuInConfigErrors = await validateAllOuInConfig();
       validationErrors.push(...allOuInConfigErrors);
 
@@ -197,7 +203,7 @@ export async function handler(event: CloudFormationCustomResourceEvent): Promise
           const awsOuKey = configAllOuKeys.find(ouKeyItem => ouKeyItem.acceleratorKey === mandatoryAccount['ouName']);
           if (awsOuKey?.ignore === false) {
             const mandatoryOrganizationAccount = organizationAccounts.find(
-              item => item.Email == mandatoryAccount['acceleratorKey'],
+              item => item.Email?.toLocaleLowerCase() == mandatoryAccount['acceleratorKey'].toLocaleLowerCase(),
             );
             if (mandatoryOrganizationAccount) {
               if (mandatoryOrganizationAccount.Status !== 'ACTIVE') {
@@ -216,7 +222,7 @@ export async function handler(event: CloudFormationCustomResourceEvent): Promise
           const awsOuKey = configAllOuKeys.find(ouKeyItem => ouKeyItem.acceleratorKey === workloadAccount['ouName']);
           if (awsOuKey?.ignore === false) {
             const organizationAccount = organizationAccounts.find(
-              item => item.Email == workloadAccount['acceleratorKey'],
+              item => item.Email?.toLocaleLowerCase() == workloadAccount['acceleratorKey'].toLocaleLowerCase(),
             );
             if (organizationAccount) {
               if (organizationAccount.Status !== 'ACTIVE') {
@@ -351,7 +357,7 @@ async function validateServiceControlPolicyCount(
           response.Policies.forEach(item => existingAttachedScps.push(item.Name!));
         }
 
-        const totalScps = await getTotalScps(
+        const [totalScps, allowListStrategyAndFullAWSAccessPolicyFlag] = await getTotalScps(
           target.name,
           scpItem.targetType,
           existingAttachedScps,
@@ -359,12 +365,20 @@ async function validateServiceControlPolicyCount(
           policyTagKey,
         );
 
-        const totalScpCount = totalScps.length;
+        let totalScpCount = totalScps.length;
 
         console.log(`Scp count validation started for target ${target.name}, target type is ${scpItem.targetType}`);
         console.log(`${target.name} ${scpItem.targetType} existing attached scps are - ${existingAttachedScps}`);
         console.log(`${target.name} ${scpItem.targetType} updated list of scps for attachment - ${totalScps}`);
         console.log(`${target.name} ${scpItem.targetType} total scp count is ${totalScpCount}`);
+
+        if (allowListStrategyAndFullAWSAccessPolicyFlag) {
+          console.log(
+            `Since the provided SCPs for ${scpItem.targetType} "${target.name}" has ${scpItem.strategy} strategy, the totalSCP count will be reduced by 1 because for ${scpItem.strategy} strategy 'FullAWSAccess' policy is detached`,
+          );
+          totalScpCount = totalScpCount - 1;
+          console.log(`${target.name} ${scpItem.targetType} new total scp count is ${totalScpCount}`);
+        }
 
         if (totalScpCount > 5) {
           console.log(
@@ -399,9 +413,14 @@ async function getTotalScps(
   existingScps: string[],
   serviceControlPolicies: serviceControlPolicyType[],
   policyTagKey: string,
-): Promise<string[]> {
-  const totalScps: string[] = getNewScps(targetName, targetType, existingScps, serviceControlPolicies);
-
+): Promise<[string[], boolean]> {
+  const [totalScps, allowListStrategyFlag]: [string[], boolean] = getNewScps(
+    targetName,
+    targetType,
+    existingScps,
+    serviceControlPolicies,
+  );
+  let allowListStrategyAndFullAWSAccessPolicyFlag = false;
   for (const existingScp of existingScps) {
     // check for control tower drift
     let nextToken: string | undefined = undefined;
@@ -422,6 +441,10 @@ async function getTotalScps(
 
           // When attached policy is AWS managed, add to list of policies
           if (isAwsManaged) {
+            // If the provided SCPs have 'allow-list' strategy and FullAWSAccess Policy is already attached to the TargetType then set allowListStrategyAndFullAWSAccessPolicyFlag to true
+            // This flag will be used to reduce the Total SCP count by 1 because when allow-list strategy is defined for a particular TargetType then FullAWSAccessPolicy is detached
+            if (allowListStrategyFlag && policy.Id === 'p-FullAWSAccess')
+              allowListStrategyAndFullAWSAccessPolicyFlag = true;
             totalScps.push(existingScp);
             break;
           }
@@ -449,7 +472,7 @@ async function getTotalScps(
     } while (nextToken);
   }
 
-  return totalScps;
+  return [totalScps, allowListStrategyAndFullAWSAccessPolicyFlag];
 }
 
 /**
@@ -492,23 +515,28 @@ function getNewScps(
   targetType: scpTargetType,
   existingScps: string[],
   serviceControlPolicies: serviceControlPolicyType[],
-): string[] {
+): [string[], boolean] {
   const configScps: string[] = [];
+  let allowListStrategyFlag = true;
 
   for (const scpItem of serviceControlPolicies) {
     for (const target of scpItem.targets ?? []) {
       if (scpItem.targetType === targetType && target.name === targetName) {
+        if (scpItem.strategy === 'deny-list') allowListStrategyFlag = false;
         configScps.push(scpItem.name);
       }
     }
   }
-  return configScps.filter(x => existingScps.indexOf(x) === -1);
+
+  return [configScps.filter(x => existingScps.indexOf(x) === -1), allowListStrategyFlag];
 }
 
 async function validateControlTower() {
   // confirm mandatory accounts exist in aws
   for (const mandatoryAccount of mandatoryAccounts) {
-    const existingAccount = organizationAccounts.find(item => item.Email == mandatoryAccount['acceleratorKey']);
+    const existingAccount = organizationAccounts.find(
+      item => item.Email?.toLocaleLowerCase() == mandatoryAccount['acceleratorKey'].toLocaleLowerCase(),
+    );
     if (existingAccount?.Status == 'ACTIVE') {
       console.log(`Mandatory Account ${mandatoryAccount['acceleratorKey']} exists.`);
     } else {
@@ -546,7 +574,9 @@ async function validateControlTower() {
     for (const workloadAccount of workloadAccounts) {
       const accountConfig = JSON.parse(workloadAccount['dataBag']);
       const accountName = accountConfig['name'];
-      const account = organizationAccounts.find(oa => oa.Email == workloadAccount['acceleratorKey']);
+      const account = organizationAccounts.find(
+        oa => oa.Email?.toLocaleLowerCase() == workloadAccount['acceleratorKey'].toLocaleLowerCase(),
+      );
 
       if (!account) {
         console.log(`push to ctAccountsToAdd does not exist ${accountName}`);
@@ -883,10 +913,14 @@ async function validateAllOuInConfig(): Promise<string[]> {
 async function validateAllAwsAccountsInConfig(): Promise<string[]> {
   const errors: string[] = [];
   for (const account of organizationAccounts) {
-    if (workloadAccounts.find(item => item['acceleratorKey'] === account.Email!)) {
+    if (
+      workloadAccounts.find(item => item['acceleratorKey'].toLocaleLowerCase() === account.Email!.toLocaleLowerCase())
+    ) {
       continue;
     }
-    if (mandatoryAccounts.find(item => item['acceleratorKey'] === account.Email!)) {
+    if (
+      mandatoryAccounts.find(item => item['acceleratorKey'].toLocaleLowerCase() === account.Email!.toLocaleLowerCase())
+    ) {
       continue;
     }
     //check if ou is ignored
@@ -928,4 +962,113 @@ async function getRootId(): Promise<string> {
     nextToken = page.NextToken;
   } while (nextToken);
   return rootId;
+}
+
+type CIDRConfig = {
+  vpcName: string;
+  cidrs: string[];
+  logicalId: string;
+  parameterName: string;
+};
+
+function isArrayOfType<TItem>(value: unknown, guard: (value: unknown) => value is TItem): value is TItem[] {
+  if (!Array.isArray(value)) return false;
+
+  for (const child of value) {
+    if (!guard(child)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+const isString = (value: unknown): value is string => typeof value === 'string';
+export function isCIDRConfigArray(value: unknown): value is CIDRConfig[] {
+  return isArrayOfType(value, isCIDRConfig);
+}
+export function isCIDRConfig(value: unknown): value is CIDRConfig {
+  return (
+    typeof value === 'object' &&
+    typeof (value as CIDRConfig).vpcName === 'string' &&
+    typeof (value as CIDRConfig).logicalId === 'string' &&
+    typeof (value as CIDRConfig).parameterName === 'string' &&
+    isArrayOfType((value as CIDRConfig).cidrs, isString)
+  );
+}
+
+async function validateCidrOrder(existingCidrs: CIDRConfig[], errors: string[]) {
+  console.log('Validating cidr order', existingCidrs);
+  for (const config of existingCidrs) {
+    console.log(`Validating cidrs for vpc ${config.vpcName}`);
+    const currentCidrs = config.cidrs;
+    const deployedCidrs = await getLastDeployedCIDRsFor(config);
+    console.log(`CIDRS: ${deployedCidrs?.join(',') ?? '-'} -> ${config.cidrs.join(',')}`);
+    if (!isCidrOrderValid(config.vpcName, deployedCidrs, currentCidrs)) {
+      const message = `Configuration of VPC ${config.vpcName} changes the order of already deployed CIDRs. This will cause a recreation of said resources!`;
+      console.log(message);
+      errors.push(message);
+    }
+  }
+}
+
+export function isCidrOrderValid(vpcName: string, deployedCidrs: string[], toBeDeployedCidrs: string[]) {
+  if (!deployedCidrs?.length) {
+    console.log(`There is no information on former deployments of cidrs for vpc ${vpcName}.`);
+    return true;
+  }
+
+  if (areArrayContentsEqual(toBeDeployedCidrs, deployedCidrs)) {
+    console.log('There is no change in the cidrs configuration.');
+    return true;
+  }
+
+  let mismatchFound = false;
+  const commonSize = Math.max(deployedCidrs.length, toBeDeployedCidrs.length);
+  for (let index = 0; index < commonSize; index++) {
+    const matches = deployedCidrs[index] === toBeDeployedCidrs[index];
+    if (matches) {
+      // Once a mismatch has been found each further match is invalid
+      if (mismatchFound) {
+        return false;
+      }
+    } else {
+      mismatchFound = true;
+      // See if the deployed cidr is part of toBeDeployedCidrs. If yes then config is invalid
+      if (toBeDeployedCidrs.includes(deployedCidrs[index])) {
+        return false;
+      }
+    }
+  }
+
+  // Valid if all checks pass
+  return true;
+}
+
+async function getLastDeployedCIDRsFor(config: CIDRConfig): Promise<string[]> {
+  try {
+    const cidrsString = await throttlingBackOff(() =>
+      ssmClient.send(
+        new GetParameterCommand({
+          Name: config.parameterName,
+        }),
+      ),
+    );
+
+    return cidrsString.Parameter?.Value?.split(',') ?? [];
+  } catch (error) {
+    console.error('Unabled to load ssm parameter with deployed cidr config', error);
+    return [];
+  }
+}
+
+function areArrayContentsEqual<T>(a1: T[], a2: T[]) {
+  if (a1.length !== a2.length) return false;
+
+  for (let index = 0; index < a1.length; index++) {
+    if (a1[index] !== a2[index]) {
+      return false;
+    }
+  }
+  return true;
 }

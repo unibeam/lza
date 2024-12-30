@@ -9,6 +9,11 @@ acceleratorMetadata:
   account: LogArchive
   readOnlyAccessRoleArns:
     - arn:aws:iam::111111111111:role/test-access-role
+defaultEventBus:
+  applyDefaultEventBusPolicy: true
+  deploymentTargets:
+    accounts:
+      - Management
 snsTopics:
   deploymentTargets:
     organizationalUnits:
@@ -18,6 +23,7 @@ snsTopics:
       emailAddresses:
         - notify-security@example.com
 terminationProtection: true
+enableOptInRegions: true
 lambda:
   encryption:
     useCMK: true
@@ -199,6 +205,8 @@ logging:
       managedDataIdentifiers:
         categories:
           - Credentials
+    firehose:
+      fileExtension: json.gz
     enable: true
     replaceLogDestinationArn: arn:aws:logs:us-east-1:111111111111:destination/log-destination
     dynamicPartitioning: dynamic-partitioning/log-filters.json

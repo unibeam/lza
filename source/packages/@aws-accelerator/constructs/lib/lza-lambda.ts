@@ -12,8 +12,8 @@
  */
 
 import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
 import { NagSuppressions } from 'cdk-nag';
+import { Construct } from 'constructs';
 
 /**
  * LzaLambdaProps properties
@@ -29,6 +29,10 @@ export interface LzaLambdaProps {
    * LZA Custom resource lambda asset folder path including the /dist folder
    */
   readonly assetPath: string;
+  /**
+   * LZA Custom resource custom hash for the lambda asset
+   */
+  readonly customAssetHash?: string;
   /**
    * Custom resource lambda environment encryption key, when undefined default AWS managed key will be used
    */
@@ -89,6 +93,10 @@ export interface LzaLambdaProps {
    * Prefix for nag suppression
    */
   readonly nagSuppressionPrefix: string;
+  /**
+   * Node Lambda Runtime
+   */
+  readonly lambdaRuntime?: cdk.aws_lambda.Runtime;
 }
 
 /**
@@ -96,6 +104,7 @@ export interface LzaLambdaProps {
  * Class to create LZA standard Lambda function used for custom resource
  */
 export class LzaLambda extends Construct {
+  public static readonly DEFAULT_RUNTIME = cdk.aws_lambda.Runtime.NODEJS_18_X;
   public readonly resource: cdk.aws_lambda.IFunction;
   public readonly logGroup: cdk.aws_logs.LogGroup;
 
@@ -105,8 +114,8 @@ export class LzaLambda extends Construct {
     this.resource = new cdk.aws_lambda.Function(this, 'Resource', {
       functionName: props.functionName,
       description: props.description ?? `Accelerator deployed lambda function.`,
-      code: cdk.aws_lambda.Code.fromAsset(props.assetPath),
-      runtime: cdk.aws_lambda.Runtime.NODEJS_18_X,
+      code: cdk.aws_lambda.Code.fromAsset(props.assetPath, { assetHash: props.customAssetHash }),
+      runtime: props.lambdaRuntime ?? LzaLambda.DEFAULT_RUNTIME,
       memorySize: props.memorySize ?? 512,
       timeout: props.timeOut,
       role: props.role,

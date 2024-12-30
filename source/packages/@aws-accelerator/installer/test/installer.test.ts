@@ -27,9 +27,12 @@ const stacks: InstallerStack[] = [
     }),
     useExternalPipelineAccount: false,
     enableTester: true,
+    useS3Source: false,
+    s3SourceKmsKeyArn: 'arn:aws:kms:us-east-1:000000000000:key/aaaaaaaa-1111-bbbb-2222-cccccc333333',
     managementCrossAccountRoleName: 'AWSControlTowerExecution',
     enableSingleAccountMode: false,
     usePermissionBoundary: false,
+    enableRegionByRegionDeployment: false,
   }),
   // Initialize stack from management account without tester pipeline
   new InstallerStack(new cdk.App(), 'AWSAccelerator-Test-InstallerStack', {
@@ -38,8 +41,11 @@ const stacks: InstallerStack[] = [
     }),
     useExternalPipelineAccount: false,
     enableTester: false,
+    useS3Source: false,
+    s3SourceKmsKeyArn: 'arn:aws:kms:us-east-1:000000000000:key/aaaaaaaa-1111-bbbb-2222-cccccc333333',
     enableSingleAccountMode: false,
     usePermissionBoundary: false,
+    enableRegionByRegionDeployment: false,
   }),
   //Initialize stack from external pipeline account with tester pipeline
   new InstallerStack(new cdk.App(), 'AWSAccelerator-Test-InstallerStack', {
@@ -48,9 +54,12 @@ const stacks: InstallerStack[] = [
     }),
     useExternalPipelineAccount: true,
     enableTester: true,
+    useS3Source: false,
+    s3SourceKmsKeyArn: 'arn:aws:kms:us-east-1:000000000000:key/aaaaaaaa-1111-bbbb-2222-cccccc333333',
     managementCrossAccountRoleName: 'AWSControlTowerExecution',
     enableSingleAccountMode: false,
     usePermissionBoundary: false,
+    enableRegionByRegionDeployment: false,
   }),
   //Initialize stack from external pipeline account without tester pipeline
   new InstallerStack(new cdk.App(), 'AWSAccelerator-Test-InstallerStack', {
@@ -59,8 +68,11 @@ const stacks: InstallerStack[] = [
     }),
     useExternalPipelineAccount: true,
     enableTester: false,
+    useS3Source: false,
+    s3SourceKmsKeyArn: 'arn:aws:kms:us-east-1:000000000000:key/aaaaaaaa-1111-bbbb-2222-cccccc333333',
     enableSingleAccountMode: false,
     usePermissionBoundary: false,
+    enableRegionByRegionDeployment: false,
   }),
   //Initialize stack from external pipeline account without tester pipeline
   new InstallerStack(new cdk.App(), 'AWSAccelerator-Test-InstallerStack', {
@@ -69,8 +81,11 @@ const stacks: InstallerStack[] = [
     }),
     useExternalPipelineAccount: true,
     enableTester: false,
+    useS3Source: false,
+    s3SourceKmsKeyArn: 'arn:aws:kms:us-east-1:000000000000:key/aaaaaaaa-1111-bbbb-2222-cccccc333333',
     enableSingleAccountMode: true,
     usePermissionBoundary: false,
+    enableRegionByRegionDeployment: false,
   }),
   //Initialize stack from management account with permission boundary
   new InstallerStack(new cdk.App(), 'AWSAccelerator-Test-InstallerStack', {
@@ -79,8 +94,37 @@ const stacks: InstallerStack[] = [
     }),
     useExternalPipelineAccount: false,
     enableTester: false,
+    useS3Source: false,
+    s3SourceKmsKeyArn: 'arn:aws:kms:us-east-1:000000000000:key/aaaaaaaa-1111-bbbb-2222-cccccc333333',
     enableSingleAccountMode: false,
     usePermissionBoundary: true,
+    enableRegionByRegionDeployment: false,
+  }),
+  // Initialize stack with LZA source code from S3 bucket and object
+  new InstallerStack(new cdk.App(), 'AWSAccelerator-Test-InstallerStack', {
+    synthesizer: new cdk.DefaultStackSynthesizer({
+      generateBootstrapVersionRule: false,
+    }),
+    useExternalPipelineAccount: false,
+    enableTester: false,
+    useS3Source: true,
+    s3SourceKmsKeyArn: 'arn:aws:kms:us-east-1:000000000000:key/aaaaaaaa-1111-bbbb-2222-cccccc333333',
+    enableSingleAccountMode: false,
+    usePermissionBoundary: false,
+    enableRegionByRegionDeployment: false,
+  }),
+  // Initialize stack with LZA region by region deployment
+  new InstallerStack(new cdk.App(), 'AWSAccelerator-Test-InstallerStack', {
+    synthesizer: new cdk.DefaultStackSynthesizer({
+      generateBootstrapVersionRule: false,
+    }),
+    useExternalPipelineAccount: false,
+    enableTester: false,
+    useS3Source: true,
+    s3SourceKmsKeyArn: 'arn:aws:kms:us-east-1:000000000000:key/aaaaaaaa-1111-bbbb-2222-cccccc333333',
+    enableSingleAccountMode: false,
+    usePermissionBoundary: false,
+    enableRegionByRegionDeployment: true,
   }),
 ];
 

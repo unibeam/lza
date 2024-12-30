@@ -76,7 +76,7 @@
     {
       "Sid": "EbsEncryptionStatement",
       "Effect": "Deny",
-      "Action": ["ec2:DisableEbsEncryptionByDefault"],
+      "Action": ["ec2:DisableEbsEncryptionByDefault", "ec2:ModifyEbsDefaultKmsKeyId"],
       "Resource": "*",
       "Condition": {
         "ArnNotLike": {
@@ -122,6 +122,32 @@
         "arn:${PARTITION}:logs:*:*:log-group:/aws/lambda/${ACCELERATOR_PREFIX}-*:log-stream:*"
       ],
       "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalARN": [
+            "arn:${PARTITION}:iam::*:role/${ACCELERATOR_PREFIX}-*",
+            "arn:${PARTITION}:iam::*:role/${MANAGEMENT_ACCOUNT_ACCESS_ROLE}",
+            "arn:${PARTITION}:iam::*:role/cdk-accel-*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "PreventKeyModification",
+      "Effect": "Deny",
+      "Action": [
+        "kms:DisableKeyRotation",
+        "kms:CancelKeyDeletion",
+        "kms:ScheduleKeyDeletion",
+        "kms:DisableKey",
+        "kms:DeleteAlias"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ForAllValues:StringLike": {
+          "kms:ResourceAliases": [
+            "alias/accelerator*"
+          ]
+        },
         "ArnNotLike": {
           "aws:PrincipalARN": [
             "arn:${PARTITION}:iam::*:role/${ACCELERATOR_PREFIX}-*",

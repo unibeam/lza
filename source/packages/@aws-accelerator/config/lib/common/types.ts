@@ -78,6 +78,26 @@ export class CustomS3ResourcePolicyOverridesConfig implements ICustomS3ResourceP
 }
 
 /**
+ * Custom policy overrides configuration for the default Event Bus resource policy
+ *
+ * @remarks Use this configuration to provide a JSON file defining a resource policy to apply to the default Eventbridge Event Bus."
+ */
+export interface ICustomEventBusResourcePolicyOverrideConfig {
+  /**
+   * Event Bus resource policy file
+   *
+   * @remarks
+   * Event Bus resource policy file containing JSON string with policy statements.
+   * Solution will overwrite the event bus resource policy with the context of the file.
+   */
+  policy?: NonEmptyString;
+}
+
+export class CustomEventBusResourcePolicyOverridesConfig implements ICustomEventBusResourcePolicyOverrideConfig {
+  readonly policy: string | undefined = undefined;
+}
+
+/**
  * Imported Bucket configuration with CMK enabled.
  */
 export interface IImportedCustomerManagedEncryptionKeyBucketConfig {
@@ -391,6 +411,23 @@ export interface ITag {
 export class Tag implements ITag {
   readonly key: string = '';
   readonly value: string = '';
+}
+
+export interface IOperationPreferences {
+  failureToleranceCount?: number;
+  failureTolerancePercentage?: number;
+  maxConcurrentCount?: number;
+  maxConcurrentPercentage?: number;
+  regionConcurrencyType?: string;
+  regionOrder?: string[];
+}
+export class OperationPreferences implements IOperationPreferences {
+  readonly failureToleranceCount: number | undefined = undefined;
+  readonly failureTolerancePercentage: number = 25;
+  readonly maxConcurrentCount: number | undefined = undefined;
+  readonly maxConcurrentPercentage: number = 35;
+  readonly regionConcurrencyType: string = 'PARALLEL';
+  readonly regionOrder: string[] | undefined = undefined;
 }
 
 export interface ICfnParameter {

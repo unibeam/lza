@@ -15,7 +15,8 @@
     "cleanup": "tsc --build ./ --clean && rm -rf node_modules && rm -rf dist && rm -rf cdk.out",
     "cleanup:tsc": "tsc --build ./ --clean",
     "watch": "tsc -w",
-    "test": "jest --coverage --ci --passWithNoTests",
+    "test:unit": "jest --coverage --ci --passWithNoTests",
+    "test:clean": "rm -f ./test-reports/*.xml",
     "lint": "eslint --fix  --max-warnings 0 -c ../../../.eslintrc.json 'lib/**/*.{ts,tsx}' 'test/**/*.{ts,tsx}' 'validator/**/*.{ts,tsx}' --ignore-pattern \"*.d.ts\" ",
     "precommit": "eslint --max-warnings 0 -c ../../../.eslintrc.json 'lib/**/*.{ts,tsx}' 'test/**/*.{ts,tsx}' 'validator/**/*.{ts,tsx}' --ignore-pattern \"*.d.ts\" ",
     "schema:accounts": "ts-json-schema-generator --path lib/models/accounts-config.ts --type IAccountsConfig -o lib/schemas/accounts-config.json",
@@ -28,11 +29,11 @@
     "schema:network": "ts-json-schema-generator --path lib/models/network-config.ts --type INetworkConfig -o lib/schemas/network-config.json"
   },
   "devDependencies": {
-    "@types/jest": "29.4.0",
+    "@types/jest": "29.5.12",
     "@types/node": "18.14.0",
     "@typescript-eslint/eslint-plugin": "5.53.0",
     "@typescript-eslint/parser": "5.53.0",
-    "aws-cdk-lib": "2.148.0",
+    "aws-cdk-lib": "2.158.0",
     "email-validator": "2.0.4",
     "eslint": "8.34.0",
     "eslint-config-prettier": "8.6.0",
